@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pymas-studio"
+version = "0.1.0"
+description = "Local static 3D viewer for pymas structural models"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "PyMAS Studio contributors" }]
+keywords = ["structural-engineering", "pymas", "three.js", "visualization"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+Homepage = "https://github.com/"
+
+[tool.setuptools]
+packages = ["pymas_studio"]
+
+[tool.setuptools.package-data]
+pymas_studio = ["static/**/*"]

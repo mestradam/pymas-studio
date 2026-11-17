@@ -1,0 +1,14 @@
+node_modules/
+web/dist/
+web/public/samples/
+*.tsbuildinfo
+.DS_Store
+
+__pycache__/
+*.py[cod]
+.venv/
+python/build/
+python/dist/
+python/*.egg-info/
+python/pymas_studio/static/*
+!python/pymas_studio/static/README.md
