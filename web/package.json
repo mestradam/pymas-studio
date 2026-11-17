@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "PyMAS Studio 3D - visor estático de modelos estructurales PyMAS",
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "predev": "node scripts/sync-samples.mjs",

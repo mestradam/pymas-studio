@@ -37,11 +37,110 @@ la ventana, o usar el botón **Abrir JSON**.
 | `npm run preview` | Sirve localmente el build de producción. |
 | `npm run samples:sync` | Copia `fixtures/` a `web/public/samples/` y genera `manifest.json`. |
 
+## Flujo de trabajo Git (Atlassian Gitflow)
+
+El proyecto adopta el **Gitflow Workflow de Atlassian**
+([referencia oficial](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow)).
+Se utiliza `main` como rama estable, equivalente a `master` en el artículo
+original, y `develop` como rama de integración.
+
+### Ramas permanentes
+
+| Rama | Propósito | Reglas |
+| --- | --- | --- |
+| `main` | Código estable y desplegable. | Sólo recibe merges desde `release/*` y `hotfix/*`. Cada merge se etiqueta con una versión. Sin commits directos. |
+| `develop` | Integración del trabajo en curso. | Recibe merges desde `feature/*` mediante Pull Request. Es la base para nuevas funcionalidades y releases. Sin commits directos. |
+
+### Ramas de apoyo
+
+| Rama | Se crea desde | Se integra en | Uso |
+| --- | --- | --- | --- |
+| `feature/<tema>` | `develop` | `develop` | Funcionalidades, mejoras y correcciones no urgentes. Vida corta. |
+| `release/<version>` | `develop` | `main` y `develop` | Estabilización, pruebas finales y ajustes de versión. |
+| `hotfix/<version>` | `main` | `main` y `develop` | Correcciones urgentes sobre una versión ya publicada. |
+
+Los nombres deben ser descriptivos y en minúsculas, por ejemplo
+`feature/inspector-barras`, `release/0.2.0` o `hotfix/0.1.1`.
+
+### Ciclo de una funcionalidad
+
+```bash
+git switch develop
+git pull --ff-only origin develop
+git switch -c feature/inspector-barras
+
+# Desarrollo y commits atómicos
+npm test
+npm run build
+
+git add .
+git commit -m "feat: añadir inspector 2D de barras"
+git push -u origin feature/inspector-barras
+```
+
+Después se abre un **Pull Request de `feature/inspector-barras` hacia
+`develop`**. Una vez revisado, aprobado y con la integración continua en verde,
+se fusiona con merge commit (`--no-ff`) y se elimina la rama de funcionalidad.
+
+### Publicación de una versión
+
+```bash
+git switch -c release/0.2.0 develop
+# Ajustes finales, pruebas y actualización de versión
+
+git switch main
+git merge --no-ff release/0.2.0
+git tag -a v0.2.0 -m "PyMAS Studio 3D v0.2.0"
+
+git switch develop
+git merge --no-ff release/0.2.0
+git branch -d release/0.2.0
+git push origin main develop --tags
+```
+
+### Corrección urgente
+
+```bash
+git switch -c hotfix/0.2.1 main
+# Corrección mínima y prueba de regresión
+
+git switch main
+git merge --no-ff hotfix/0.2.1
+git tag -a v0.2.1 -m "PyMAS Studio 3D v0.2.1"
+
+git switch develop
+git merge --no-ff hotfix/0.2.1
+git branch -d hotfix/0.2.1
+git push origin main develop --tags
+```
+
+### Reglas de integración
+
+* No hacer commits directamente en `main` ni en `develop`; todo cambio entra
+  mediante Pull Request.
+* Cada PR debe pasar `npm test` y `npm run build` antes de fusionarse.
+* Las ramas `feature/*` pueden actualizarse con rebase sobre `develop` antes del
+  PR si es necesario, pero **nunca** se reescribe el historial de `main` o
+  `develop`.
+* Usar merge commits (`--no-ff`) para conservar el contexto de cada rama.
+* Cada release u hotfix debe actualizar la versión, generar su tag `vX.Y.Z` y
+  volver a integrarse en `develop`.
+* No versionar artefactos generados: `web/dist/`, `web/public/samples/`,
+  `node_modules/` ni `__pycache__/`.
+* Los mensajes de commit siguen Conventional Commits: `feat:`, `fix:`, `docs:`,
+  `test:`, `refactor:`, `chore:`.
+
+### Estado actual de las ramas
+
+* `main`: plano del proyecto y fixtures originales.
+* `develop`: implementación de la Fase 1 y trabajo en curso.
+
 ## Estructura
 
 ```text
 pymas-studio/
 ├── PYMAS_STUDIO_PLAN.md       # Plano maestro
+├── LICENSE                    # Licencia MIT
 ├── fixtures/                  # 12 exportaciones reales de pymas
 ├── web/                       # React + TypeScript + Vite + Three.js
 │   ├── public/samples/        # Generado en cada build (no versionado)
@@ -95,3 +194,11 @@ ambos formatos y normaliza todo a un modelo interno:
 * Pendiente para fases siguientes: deformada, diagramas de esfuerzos, reacciones
   en 3D, inspector 2D, combinaciones en la UI, comparador de fases y empaquetado
   final del puente Python.
+
+## Licencia
+
+Este proyecto se distribuye bajo la licencia **MIT**. Consulta el archivo
+[`LICENSE`](LICENSE) para el texto completo.
+
+Copyright © 2026 Martin Estrada Mejía.
+
