@@ -3,7 +3,10 @@ import type { PatternResultData, PymasModel } from "../types/pymas";
 import {
   MissingPatternResultError,
   computeCombination,
+  computeLinearCombinations,
+  envelopeAcrossCombinations,
   envelopeCombination,
+  envelopeResults,
   hasStoredResult,
   linearCombination,
 } from "./superposition";
@@ -166,6 +169,160 @@ describe("superposition · envolvente", () => {
           (maxFrame.internalForces.mz[i] ?? 0) + 1e-9,
         );
       }
+    }
+  });
+});
+
+describe("superposition · combinaciones y envolventes en vivo", () => {
+  it("F3: calcula todas las combinaciones sin usar resultados precalculados", () => {
+    const { model } = loadFixture("F3_analisis_reparacion.json");
+    const stored = model.results;
+    const withoutCombinations: PymasModel = {
+      ...model,
+      results: Object.fromEntries(
+        Object.entries(stored).filter(([resultId]) => !model.loadCombinations[resultId]),
+      ),
+    };
+
+    expect(Object.keys(withoutCombinations.results)).not.toContain("1.4D");
+    const computed = computeLinearCombinations(
+      withoutCombinations,
+      model.loadCombinationOrder,
+    );
+    expect(Object.keys(computed)).toHaveLength(model.loadCombinationOrder.length);
+
+    for (const combination of Object.values(model.loadCombinations)) {
+      const live = computed[combination.id];
+      const expected = stored[combination.id];
+      expect(live).toBeDefined();
+      expect(expected).toBeDefined();
+      if (live && expected) {
+        expectResultClose(live, expected, model, 1e-9);
+      }
+    }
+  });
+
+  it("F3: ENV_MAX y ENV_MIN sobre las combinaciones activas coinciden con sus extremos exactos", () => {
+    const { model } = loadFixture("F3_analisis_reparacion.json");
+    const activeIds = model.loadCombinationOrder;
+    const combinations = computeLinearCombinations(model, activeIds);
+    const envelope = envelopeAcrossCombinations(model, activeIds);
+    const combinationResults = activeIds
+      .map((id) => combinations[id])
+      .filter((result): result is PatternResultData => result !== undefined);
+
+    expect(combinationResults).toHaveLength(activeIds.length);
+
+    for (const nodeId of model.nodeOrder) {
+      for (const key of ["ux", "uy", "uz", "rx", "ry", "rz"] as const) {
+        const values = combinationResults.map(
+          (result) => result.nodalDisplacements[nodeId]?.[key] ?? 0,
+        );
+        expect(envelope.min.nodalDisplacements[nodeId]?.[key]).toBeCloseTo(
+          Math.min(...values),
+          9,
+        );
+        expect(envelope.max.nodalDisplacements[nodeId]?.[key]).toBeCloseTo(
+          Math.max(...values),
+          9,
+        );
+      }
+      for (const key of ["fx", "fy", "fz", "mx", "my", "mz"] as const) {
+        const values = combinationResults.map(
+          (result) => result.reactions[nodeId]?.[key] ?? 0,
+        );
+        expect(envelope.min.reactions[nodeId]?.[key]).toBeCloseTo(
+          Math.min(...values),
+          9,
+        );
+        expect(envelope.max.reactions[nodeId]?.[key]).toBeCloseTo(
+          Math.max(...values),
+          9,
+        );
+      }
+    }
+
+    for (const frameId of model.frameOrder) {
+      const minFrame = envelope.min.frameResults[frameId];
+      const maxFrame = envelope.max.frameResults[frameId];
+      expect(minFrame).toBeDefined();
+      expect(maxFrame).toBeDefined();
+      if (!minFrame || !maxFrame) continue;
+
+      for (const key of ["fx", "fy", "fz", "mx", "my", "mz"] as const) {
+        for (let index = 0; index < minFrame.internalForces.stations.length; index += 1) {
+          const values = combinationResults.map(
+            (result) =>
+              result.frameResults[frameId]?.internalForces[key][index] ?? 0,
+          );
+          expect(minFrame.internalForces[key][index]).toBeCloseTo(
+            Math.min(...values),
+            9,
+          );
+          expect(maxFrame.internalForces[key][index]).toBeCloseTo(
+            Math.max(...values),
+            9,
+          );
+        }
+      }
+      for (const key of ["ux", "uy", "uz", "rx", "ry", "rz"] as const) {
+        for (let index = 0; index < minFrame.internalDisplacements.stations.length; index += 1) {
+          const values = combinationResults.map(
+            (result) =>
+              result.frameResults[frameId]?.internalDisplacements[key][index] ?? 0,
+          );
+          expect(minFrame.internalDisplacements[key][index]).toBeCloseTo(
+            Math.min(...values),
+            9,
+          );
+          expect(maxFrame.internalDisplacements[key][index]).toBeCloseTo(
+            Math.max(...values),
+            9,
+          );
+        }
+      }
+    }
+  });
+
+  it("envolvente de un subconjunto activo sólo considera esas combinaciones", () => {
+    const { model } = loadFixture("F3_analisis_reparacion.json");
+    const activeIds = model.loadCombinationOrder.slice(0, 3);
+    const combinations = computeLinearCombinations(model, activeIds);
+    const envelope = envelopeAcrossCombinations(model, activeIds);
+    const frameId = model.frameOrder[0] ?? "";
+    const frame = envelope.max.frameResults[frameId];
+    expect(frame).toBeDefined();
+    if (!frame) return;
+
+    for (let index = 0; index < frame.internalForces.mz.length; index += 1) {
+      const values = activeIds.map(
+        (id) => combinations[id]?.frameResults[frameId]?.internalForces.mz[index] ?? 0,
+      );
+      expect(frame.internalForces.mz[index]).toBeCloseTo(Math.max(...values), 9);
+    }
+  });
+
+  it("envolvente vacía devuelve ceros y envelopeResults respeta todos los componentes", () => {
+    const { model } = loadFixture("simple_beam.json");
+    const empty = envelopeAcrossCombinations(model, []);
+    const frameId = model.frameOrder[0] ?? "";
+    expect(empty.min.frameResults[frameId]?.internalForces.mz.every((value) => value === 0)).toBe(true);
+    expect(empty.max.reactions[model.nodeOrder[0] ?? ""]?.fx).toBe(0);
+
+    const first = linearCombination(model, { default: 1 });
+    const doubled = linearCombination(model, { default: 2 });
+    const envelope = envelopeResults(model, [first, doubled]);
+    for (let index = 0; index < first.frameResults[frameId]!.internalForces.mz.length; index += 1) {
+      const a = first.frameResults[frameId]?.internalForces.mz[index] ?? 0;
+      const b = doubled.frameResults[frameId]?.internalForces.mz[index] ?? 0;
+      expect(envelope.min.frameResults[frameId]?.internalForces.mz[index]).toBeCloseTo(
+        Math.min(a, b),
+        12,
+      );
+      expect(envelope.max.frameResults[frameId]?.internalForces.mz[index]).toBeCloseTo(
+        Math.max(a, b),
+        12,
+      );
     }
   });
 });

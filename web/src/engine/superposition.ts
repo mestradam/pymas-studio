@@ -76,7 +76,7 @@ function stationsEqual(a: number[], b: number[]): boolean {
 }
 
 function firstFrameResult(
-  results: PatternResultData[],
+  results: readonly PatternResultData[],
   frameId: string,
 ): FrameResultData | undefined {
   for (const result of results) {
@@ -87,7 +87,7 @@ function firstFrameResult(
 }
 
 function targetStationsFor(
-  results: PatternResultData[],
+  results: readonly PatternResultData[],
   frameId: string,
   key: "internalForces" | "internalDisplacements",
 ): number[] {
@@ -474,6 +474,236 @@ export function combineLoadCombination(
   }
   return linearCombination(model, combination.factors, options);
 }
+
+/**
+ * Calcula en vivo todas las combinaciones lineales solicitadas a partir de los
+ * resultados base de los patrones. Nunca consulta `model.results[combinación]`:
+ * si el exportador incluye combinaciones precalculadas, se ignoran.
+ *
+ * Las combinaciones de tipo `envelope` se resuelven por separado mediante
+ * `envelopeCombination` y no forman parte de este mapa de resultados lineales.
+ */
+export function computeLinearCombinations(
+  model: PymasModel,
+  combinationIds: readonly string[] = model.loadCombinationOrder,
+  options: SuperpositionOptions = {},
+): Record<string, PatternResultData> {
+  const out: Record<string, PatternResultData> = {};
+  for (const combinationId of combinationIds) {
+    const combination = model.loadCombinations[combinationId];
+    if (!combination || combination.type === "envelope") continue;
+    out[combinationId] = linearCombination(model, combination.factors, options);
+  }
+  return out;
+}
+
+function emptyPatternResult(model: PymasModel): PatternResultData {
+  const nodalDisplacements: Record<string, Displacement6D> = {};
+  const reactions: Record<string, Vector6D> = {};
+  for (const nodeId of model.nodeOrder) {
+    nodalDisplacements[nodeId] = zeroDisplacement6();
+    reactions[nodeId] = zeroVector6();
+  }
+  const frameResults: Record<string, FrameResultData> = {};
+  for (const frameId of model.frameOrder) {
+    frameResults[frameId] = {
+      endActions: { i: zeroVector6(), j: zeroVector6() },
+      internalForces: emptyForces([...FALLBACK_STATIONS]),
+      internalDisplacements: emptyDisplacements([...FALLBACK_STATIONS]),
+    };
+  }
+  return { nodalDisplacements, reactions, frameResults };
+}
+
+/**
+ * Envolvente min/max de un conjunto arbitrario de resultados completos.
+ * Se usa para ENV_MAX / ENV_MIN sobre combinaciones activas, donde cada
+ * combinación ya es un caso de carga completo.
+ */
+export function envelopeResults(
+  model: PymasModel,
+  results: readonly PatternResultData[],
+): EnvelopeResult {
+  if (results.length === 0) {
+    const zero = emptyPatternResult(model);
+    return { min: zero, max: zero };
+  }
+
+  const minResult = emptyPatternResult(model);
+  const maxResult = emptyPatternResult(model);
+
+  for (const nodeId of model.nodeOrder) {
+    const dispSamples = {
+      ux: [] as number[],
+      uy: [] as number[],
+      uz: [] as number[],
+      rx: [] as number[],
+      ry: [] as number[],
+      rz: [] as number[],
+    };
+    const reactionSamples = {
+      fx: [] as number[],
+      fy: [] as number[],
+      fz: [] as number[],
+      mx: [] as number[],
+      my: [] as number[],
+      mz: [] as number[],
+    };
+    for (const result of results) {
+      const disp = result.nodalDisplacements[nodeId] ?? zeroDisplacement6();
+      dispSamples.ux.push(disp.ux);
+      dispSamples.uy.push(disp.uy);
+      dispSamples.uz.push(disp.uz);
+      dispSamples.rx.push(disp.rx);
+      dispSamples.ry.push(disp.ry);
+      dispSamples.rz.push(disp.rz);
+      const reaction = result.reactions[nodeId] ?? zeroVector6();
+      reactionSamples.fx.push(reaction.fx);
+      reactionSamples.fy.push(reaction.fy);
+      reactionSamples.fz.push(reaction.fz);
+      reactionSamples.mx.push(reaction.mx);
+      reactionSamples.my.push(reaction.my);
+      reactionSamples.mz.push(reaction.mz);
+    }
+
+    const minDisp = minResult.nodalDisplacements[nodeId] ?? zeroDisplacement6();
+    const maxDisp = maxResult.nodalDisplacements[nodeId] ?? zeroDisplacement6();
+    const minReaction = minResult.reactions[nodeId] ?? zeroVector6();
+    const maxReaction = maxResult.reactions[nodeId] ?? zeroVector6();
+    for (const key of Object.keys(minDisp) as Array<keyof Displacement6D>) {
+      const [min, max] = minMax(dispSamples[key]);
+      minDisp[key] = min;
+      maxDisp[key] = max;
+    }
+    for (const key of Object.keys(minReaction) as Array<keyof Vector6D>) {
+      const [min, max] = minMax(reactionSamples[key]);
+      minReaction[key] = min;
+      maxReaction[key] = max;
+    }
+    minResult.nodalDisplacements[nodeId] = minDisp;
+    maxResult.nodalDisplacements[nodeId] = maxDisp;
+    minResult.reactions[nodeId] = minReaction;
+    maxResult.reactions[nodeId] = maxReaction;
+  }
+
+  const forceComponents = ["fx", "fy", "fz", "mx", "my", "mz"] as const;
+  const dispComponents = ["ux", "uy", "uz", "rx", "ry", "rz"] as const;
+  const frameIds = new Set<string>(model.frameOrder);
+  for (const result of results) {
+    for (const frameId of Object.keys(result.frameResults)) frameIds.add(frameId);
+  }
+
+  for (const frameId of frameIds) {
+    const forceStations = targetStationsFor(results, frameId, "internalForces");
+    const dispStations = targetStationsFor(results, frameId, "internalDisplacements");
+    const minForces = emptyForces(forceStations);
+    const maxForces = emptyForces(forceStations);
+    const minDisp = emptyDisplacements(dispStations);
+    const maxDisp = emptyDisplacements(dispStations);
+
+    for (const component of forceComponents) {
+      const samples: number[][] = forceStations.map(() => []);
+      for (const result of results) {
+        const frame = result.frameResults[frameId];
+        if (!frame) {
+          for (const values of samples) values.push(0);
+          continue;
+        }
+        for (let index = 0; index < forceStations.length; index += 1) {
+          samples[index]?.push(
+            interpolate(
+              frame.internalForces.stations,
+              frame.internalForces[component],
+              forceStations[index] ?? 0,
+            ),
+          );
+        }
+      }
+      minForces[component] = samples.map((values) => minMax(values)[0]);
+      maxForces[component] = samples.map((values) => minMax(values)[1]);
+    }
+
+    for (const component of dispComponents) {
+      const samples: number[][] = dispStations.map(() => []);
+      for (const result of results) {
+        const frame = result.frameResults[frameId];
+        if (!frame) {
+          for (const values of samples) values.push(0);
+          continue;
+        }
+        for (let index = 0; index < dispStations.length; index += 1) {
+          samples[index]?.push(
+            interpolate(
+              frame.internalDisplacements.stations,
+              frame.internalDisplacements[component],
+              dispStations[index] ?? 0,
+            ),
+          );
+        }
+      }
+      minDisp[component] = samples.map((values) => minMax(values)[0]);
+      maxDisp[component] = samples.map((values) => minMax(values)[1]);
+    }
+
+    const minEndI = zeroVector6();
+    const minEndJ = zeroVector6();
+    const maxEndI = zeroVector6();
+    const maxEndJ = zeroVector6();
+    for (const key of Object.keys(minEndI) as Array<keyof Vector6D>) {
+      const iSamples: number[] = [];
+      const jSamples: number[] = [];
+      for (const result of results) {
+        const frame = result.frameResults[frameId];
+        iSamples.push(frame?.endActions.i[key] ?? 0);
+        jSamples.push(frame?.endActions.j[key] ?? 0);
+      }
+      const [iMin, iMax] = minMax(iSamples);
+      const [jMin, jMax] = minMax(jSamples);
+      minEndI[key] = iMin;
+      maxEndI[key] = iMax;
+      minEndJ[key] = jMin;
+      maxEndJ[key] = jMax;
+    }
+
+    minResult.frameResults[frameId] = {
+      endActions: { i: minEndI, j: minEndJ },
+      internalForces: minForces,
+      internalDisplacements: minDisp,
+    };
+    maxResult.frameResults[frameId] = {
+      endActions: { i: maxEndI, j: maxEndJ },
+      internalForces: maxForces,
+      internalDisplacements: maxDisp,
+    };
+  }
+
+  return { min: minResult, max: maxResult };
+}
+
+/**
+ * ENV_MAX / ENV_MIN sobre las combinaciones activas. Cada combinación se
+ * recalcula en vivo desde los patrones base; las combinaciones de tipo
+ * `envelope` aportan sus dos resultados extremos.
+ */
+export function envelopeAcrossCombinations(
+  model: PymasModel,
+  combinationIds: readonly string[] = model.loadCombinationOrder,
+  options: SuperpositionOptions = {},
+): EnvelopeResult {
+  const results: PatternResultData[] = [];
+  for (const combinationId of combinationIds) {
+    const combination = model.loadCombinations[combinationId];
+    if (!combination) continue;
+    const computed = combineLoadCombination(model, combination, options);
+    if ("min" in computed) {
+      results.push(computed.min, computed.max);
+    } else {
+      results.push(computed);
+    }
+  }
+  return envelopeResults(model, results);
+}
+
 
 export function getCombinationById(
   model: PymasModel,
