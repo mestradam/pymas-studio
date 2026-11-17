@@ -1,7 +1,7 @@
 # PyMAS Studio 3D
 
 Visor web **100 % estático** para modelos estructurales exportados por
-[`pymas`](https://github.com/). Renderiza la geometría en 3D con sistema de
+[`pymas`](https://github.com/rvcristiand/pymas). Renderiza la geometría en 3D con sistema de
 coordenadas **Z-up**, secciones extruidas `dy × dz`, apoyos, rótulas, vectores de
 carga y el balance de equilibrio global. No requiere backend: todo ocurre en el
 navegador y el mismo `dist/` funciona en GitHub Pages, en cualquier subruta o en
@@ -147,7 +147,7 @@ pymas-studio/
 │   ├── scripts/sync-samples.mjs
 │   └── src/
 │       ├── types/pymas.ts     # Contrato crudo + modelo normalizado
-│       ├── engine/            # parser, geometría, superposición, equilibrio
+│       ├── engine/            # parser, geometría, superposición, diagramas, equilibrio
 │       ├── store/             # Zustand
 │       └── components/        # viewport 3D + UI
 ├── python/                    # Puente opcional para notebooks (`pymas_studio.show`)
@@ -171,6 +171,13 @@ ambos formatos y normaliza todo a un modelo interno:
 * Los `local_axes` exportados son autoritativos; se recalculan sólo si faltan.
 * Las cargas distribuidas `fx/fy/fz` se interpretan como componentes **locales**;
   las nodales son **globales**. Esto es necesario para que el equilibrio cierre.
+* `internal_forces` e `internal_displacements` se exportan en el sistema **local**
+  de cada barra. Los diagramas se proyectan con los `local_axes` del modelo; en
+  `space_frame` la proyección local reproduce los 6 componentes nodales y en
+  `space_truss` sólo se exporta la componente axial `ux`.
+* Los extremos de las series respetan la convención de `end_actions`:
+  `fx=-fx_j`, `fy=+fy_j`, `fz=+fz_j`, `mx=-mx_j`, `my=+my_j`, `mz=-mz_j` en el
+  nudo I y signos opuestos en el nudo J.
 * `Section` (cerchas) no trae `dy`/`dz`; se deriva un tamaño visual desde `A`.
 * F3 usa `MAT_E` (existente) y `MAT_N` (reforzamiento), con colores distintivos.
 
@@ -183,17 +190,24 @@ ambos formatos y normaliza todo a un modelo interno:
 * Capas: nudos, etiquetas, apoyos, rótulas, cargas y grilla.
 * Los vectores de carga se filtran por patrón activo y se autoescalan.
 * La barra inferior verifica `ΣF` y `ΣM` contra las reacciones exportadas.
+* El motor `engine/diagrams.ts` entrega diagramas listos para dibujar: estaciones,
+  puntos indeformados, ordenadas en ejes locales, picos, interpolación para el
+  cursor y auto-escala. Sus pruebas comparan todos los fixtures, las 17
+  combinaciones de F3 y las envolventes contra los datos reales.
 
 ## Estado
 
 * **Fase 1** (tipos, parser, geometría, superposición, equilibrio y Vitest):
   completada.
-* Se adelantó el visor 3D base de la Fase 2 para poder inspeccionar los modelos
-  (drag & drop, selector de ejemplos, vistas CAD, secciones, apoyos, rótulas y
-  cargas).
-* Pendiente para fases siguientes: deformada, diagramas de esfuerzos, reacciones
-  en 3D, inspector 2D, combinaciones en la UI, comparador de fases y empaquetado
-  final del puente Python.
+* **Fase 2** (viewport 3D Z-up, drag & drop, selector de ejemplos, vistas CAD,
+  cubo de orientación, secciones extruidas, colores, apoyos, rótulas y cargas):
+  completada.
+* **Validación de diagramas**: `engine/diagrams.ts` y sus pruebas unitarias
+  verifican estaciones, proyección en ejes locales, picos, convención de extremos,
+  combinaciones lineales y envolventes contra los 12 fixtures reales.
+* Pendiente para fases siguientes: render 3D de la deformada y de los diagramas,
+  reacciones en 3D, inspector 2D, combinaciones en la UI, comparador de fases y
+  empaquetado final del puente Python.
 
 ## Licencia
 
@@ -201,4 +215,3 @@ Este proyecto se distribuye bajo la licencia **MIT**. Consulta el archivo
 [`LICENSE`](LICENSE) para el texto completo.
 
 Copyright © 2026 Martin Estrada Mejía.
-
