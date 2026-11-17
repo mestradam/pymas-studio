@@ -3,6 +3,13 @@ import { Info, Layers, X } from "lucide-react";
 import { useModelStore } from "../../store/useModelStore";
 import { buildLegend } from "../../engine/colors";
 import { patternLoadCount } from "../../engine/parser";
+import {
+  autoDeformationScale,
+  deformationHeatRange,
+} from "../../engine/deformation";
+import { autoDiagramScale, FORCE_COMPONENTS } from "../../engine/diagrams";
+import { formatNumber } from "../../engine/geometry";
+import { HEATMAP_GRADIENT } from "../../engine/heatmap";
 import { cn } from "../../lib/utils";
 
 const MODEL_TYPE_LABELS: Record<string, string> = {
@@ -18,6 +25,31 @@ const VIEW_OPTIONS = [
   ["front", "XZ"],
   ["side", "YZ"],
 ] as const;
+
+const RESULT_MODE_OPTIONS = [
+  ["pattern", "Patrón"],
+  ["combination", "Combinación"],
+  ["env_max", "ENV MAX"],
+  ["env_min", "ENV MIN"],
+] as const;
+
+const HEATMAP_OPTIONS = [
+  ["magnitude", "|U|"],
+  ["ux", "ux"],
+  ["uy", "uy"],
+  ["uz", "uz"],
+  ["drift", "Deriva"],
+  ["none", "Plano"],
+] as const;
+
+const FORCE_COMPONENT_LABELS: Record<(typeof FORCE_COMPONENTS)[number], string> = {
+  fx: "Fx",
+  fy: "Fy",
+  fz: "Fz",
+  mx: "Mx",
+  my: "My",
+  mz: "Mz",
+};
 
 function Toggle({
   label,
@@ -63,6 +95,21 @@ export default function ControlSidebar({
   const loadingSamples = useModelStore((state) => state.loadingSamples);
   const loadSample = useModelStore((state) => state.loadSample);
   const activePatternId = useModelStore((state) => state.activePatternId);
+  const resultMode = useModelStore((state) => state.resultMode);
+  const activeCombinationId = useModelStore((state) => state.activeCombinationId);
+  const activeCombinationIds = useModelStore((state) => state.activeCombinationIds);
+  const computedResult = useModelStore((state) => state.computedResult);
+  const resultError = useModelStore((state) => state.resultError);
+  const showDeformed = useModelStore((state) => state.showDeformed);
+  const deformationScale = useModelStore((state) => state.deformationScale);
+  const showGhost = useModelStore((state) => state.showGhost);
+  const animateDeformation = useModelStore((state) => state.animateDeformation);
+  const heatmapMode = useModelStore((state) => state.heatmapMode);
+  const showForceDiagrams = useModelStore((state) => state.showForceDiagrams);
+  const diagramComponents = useModelStore((state) => state.diagramComponents);
+  const diagramScale = useModelStore((state) => state.diagramScale);
+  const showDiagramLabels = useModelStore((state) => state.showDiagramLabels);
+  const showReactions = useModelStore((state) => state.showReactions);
   const view = useModelStore((state) => state.view);
   const setView = useModelStore((state) => state.setView);
   const projection = useModelStore((state) => state.projection);
@@ -79,6 +126,20 @@ export default function ControlSidebar({
   const showLoads = useModelStore((state) => state.showLoads);
   const showGrid = useModelStore((state) => state.showGrid);
   const setActivePattern = useModelStore((state) => state.setActivePattern);
+  const setResultMode = useModelStore((state) => state.setResultMode);
+  const setActiveCombination = useModelStore((state) => state.setActiveCombination);
+  const toggleCombination = useModelStore((state) => state.toggleCombination);
+  const setActiveCombinations = useModelStore((state) => state.setActiveCombinations);
+  const setDeformationScale = useModelStore((state) => state.setDeformationScale);
+  const setShowDeformed = useModelStore((state) => state.setShowDeformed);
+  const setShowGhost = useModelStore((state) => state.setShowGhost);
+  const setAnimateDeformation = useModelStore((state) => state.setAnimateDeformation);
+  const setHeatmapMode = useModelStore((state) => state.setHeatmapMode);
+  const setShowForceDiagrams = useModelStore((state) => state.setShowForceDiagrams);
+  const toggleDiagramComponent = useModelStore((state) => state.toggleDiagramComponent);
+  const setDiagramScale = useModelStore((state) => state.setDiagramScale);
+  const setShowDiagramLabels = useModelStore((state) => state.setShowDiagramLabels);
+  const setShowReactions = useModelStore((state) => state.setShowReactions);
   const setRenderMode = useModelStore((state) => state.setRenderMode);
   const setColorMode = useModelStore((state) => state.setColorMode);
   const setOpacity = useModelStore((state) => state.setOpacity);
@@ -105,6 +166,64 @@ export default function ControlSidebar({
     }
     return total;
   }, [model]);
+
+  const autoDeformFactor = useMemo(
+    () =>
+      model && computedResult
+        ? autoDeformationScale(model, computedResult, 0.08)
+        : 1,
+    [model, computedResult],
+  );
+
+  const autoDiagramFactor = useMemo(
+    () =>
+      model && computedResult && diagramComponents.length > 0
+        ? autoDiagramScale(model, computedResult, {
+            targetFraction: 0.12,
+            components: diagramComponents,
+          })
+        : 1,
+    [model, computedResult, diagramComponents],
+  );
+
+  const heatRange = useMemo(() => {
+    if (!model || !computedResult || heatmapMode === "none") return null;
+    try {
+      return deformationHeatRange(model, computedResult, heatmapMode);
+    } catch {
+      return null;
+    }
+  }, [model, computedResult, heatmapMode]);
+
+  const activeCaseLabel = useMemo(() => {
+    if (!model) return "—";
+    if (resultMode === "pattern") {
+      return activePatternId
+        ? model.loadPatterns[activePatternId]?.name ?? activePatternId
+        : "Sin patrón";
+    }
+    if (resultMode === "combination") {
+      return activeCombinationId
+        ? model.loadCombinations[activeCombinationId]?.name ?? activeCombinationId
+        : "Sin combinación";
+    }
+    const total = model.loadCombinationOrder.length;
+    return `${resultMode === "env_max" ? "ENV MAX" : "ENV MIN"} · ${
+      activeCombinationIds.length
+    }/${total} combinaciones`;
+  }, [
+    model,
+    resultMode,
+    activePatternId,
+    activeCombinationId,
+    activeCombinationIds,
+  ]);
+
+  const heatUnit = model?.meta.units.length ?? "m";
+  const formatHeat = (value: number) =>
+    heatmapMode === "drift"
+      ? `${(value * 100).toFixed(3)} %`
+      : `${formatNumber(value)} ${heatUnit}`;
 
   const plural = (count: number, one: string, many: string) =>
     `${count} ${count === 1 ? one : many}`;
@@ -221,6 +340,273 @@ export default function ControlSidebar({
               >
                 Cámara {projection === "perspective" ? "perspectiva" : "ortográfica"}
               </button>
+            </section>
+
+            <section>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <h2 className="panel-title">Caso de resultados</h2>
+                <span className="max-w-[150px] truncate text-[10px] text-slate-500">
+                  {activeCaseLabel}
+                </span>
+              </div>
+              <div className="seg w-full">
+                {RESULT_MODE_OPTIONS.map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={cn(
+                      "seg-btn flex-1 px-0 text-[9px]",
+                      resultMode === mode && "seg-btn-active",
+                    )}
+                    onClick={() => setResultMode(mode)}
+                    title={label}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {model.loadCombinationOrder.length === 0 && resultMode !== "pattern" && (
+                <div className="mt-1.5 rounded-lg border border-amber-400/20 bg-amber-400/[0.05] px-2 py-1.5 text-[10px] text-amber-200/80">
+                  El modelo no define combinaciones de carga.
+                </div>
+              )}
+
+              {resultMode === "pattern" && (
+                <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500">
+                  Usa el patrón seleccionado en la sección siguiente. El resultado
+                  se toma de los datos exportados.
+                </p>
+              )}
+
+              {resultMode === "combination" && model.loadCombinationOrder.length > 0 && (
+                <div className="mt-1.5 space-y-1">
+                  <select
+                    className="h-7 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[10px] font-medium text-slate-200 outline-none transition hover:border-white/20 focus:border-sky-400/60"
+                    value={activeCombinationId ?? ""}
+                    onChange={(event) => setActiveCombination(event.target.value)}
+                  >
+                    <option value="" disabled>
+                      Selecciona una combinación
+                    </option>
+                    {model.loadCombinationOrder.map((id) => {
+                      const combination = model.loadCombinations[id];
+                      return (
+                        <option key={id} value={id}>
+                          {combination?.name ?? id}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {activeCombinationId && (
+                    <div className="truncate font-mono text-[9px] text-slate-500">
+                      {Object.entries(
+                        model.loadCombinations[activeCombinationId]?.factors ?? {},
+                      )
+                        .map(([patternId, factor]) => `${factor}·${patternId}`)
+                        .join(" + ")}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(resultMode === "env_max" || resultMode === "env_min") &&
+                model.loadCombinationOrder.length > 0 && (
+                  <div className="mt-1.5">
+                    <div className="max-h-44 space-y-0.5 overflow-y-auto pr-1">
+                      {model.loadCombinationOrder.map((id) => {
+                        const combination = model.loadCombinations[id];
+                        const checked = activeCombinationIds.includes(id);
+                        return (
+                          <label
+                            key={id}
+                            className={cn(
+                              "flex cursor-pointer items-center gap-2 rounded-md border px-1.5 py-1 text-[10px] transition",
+                              checked
+                                ? "border-sky-400/30 bg-sky-400/[0.07] text-slate-200"
+                                : "border-white/[0.05] text-slate-500 hover:bg-white/[0.04]",
+                            )}
+                            title={Object.entries(combination?.factors ?? {})
+                              .map(([patternId, factor]) => `${factor}·${patternId}`)
+                              .join(" + ")}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleCombination(id)}
+                              className="h-3 w-3 shrink-0 cursor-pointer accent-sky-500"
+                            />
+                            <span className="min-w-0 flex-1 truncate">
+                              {combination?.name ?? id}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-1 grid grid-cols-2 gap-1">
+                      <button
+                        type="button"
+                        className="btn py-1 text-[9px]"
+                        onClick={() => setActiveCombinations(model.loadCombinationOrder)}
+                      >
+                        Todas
+                      </button>
+                      <button
+                        type="button"
+                        className="btn py-1 text-[9px]"
+                        onClick={() => setActiveCombinations([])}
+                      >
+                        Ninguna
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+              {resultError && (
+                <div className="mt-1.5 rounded-lg border border-rose-400/20 bg-rose-400/[0.05] px-2 py-1.5 text-[10px] text-rose-200/80">
+                  {resultError}
+                </div>
+              )}
+            </section>
+
+            <section>
+              <div className="mb-1.5 flex items-center justify-between">
+                <h2 className="panel-title">Deformada elástica</h2>
+                <span className="font-mono text-[10px] text-slate-500">
+                  {formatNumber(autoDeformFactor * deformationScale)}×
+                </span>
+              </div>
+              <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-1">
+                <Toggle
+                  label="Mostrar deformada"
+                  checked={showDeformed}
+                  onChange={setShowDeformed}
+                />
+                <Toggle
+                  label="Estructura fantasma"
+                  checked={showGhost}
+                  onChange={setShowGhost}
+                />
+                <Toggle
+                  label="Animación armónica"
+                  checked={animateDeformation}
+                  onChange={setAnimateDeformation}
+                />
+              </div>
+              <div className="mt-2">
+                <label className="field-label">
+                  <span>Amplificación</span>
+                  <span className="field-value">
+                    {deformationScale.toFixed(2)}× auto
+                  </span>
+                </label>
+                <input
+                  type="range"
+                  min={0.05}
+                  max={5}
+                  step={0.05}
+                  value={deformationScale}
+                  disabled={!showDeformed}
+                  onChange={(event) =>
+                    setDeformationScale(Number(event.target.value))
+                  }
+                />
+                <div className="mt-0.5 text-[9px] text-slate-500">
+                  factor {formatNumber(autoDeformFactor * deformationScale)} · auto{" "}
+                  {formatNumber(autoDeformFactor)}
+                </div>
+              </div>
+              <div className="mt-2">
+                <div className="field-label">
+                  <span>Mapa de calor</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  {HEATMAP_OPTIONS.map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={cn(
+                        "btn px-0 py-1 text-[10px]",
+                        heatmapMode === mode && "btn-active",
+                      )}
+                      onClick={() => setHeatmapMode(mode)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {heatmapMode !== "none" && heatRange && (
+                  <div className="mt-1.5">
+                    <div
+                      className="h-2 w-full rounded-full border border-white/10"
+                      style={{ background: HEATMAP_GRADIENT }}
+                    />
+                    <div className="mt-0.5 flex justify-between font-mono text-[9px] text-slate-500">
+                      <span>{formatHeat(heatRange.min)}</span>
+                      <span>{formatHeat(heatRange.max)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section>
+              <div className="mb-1.5 flex items-center justify-between">
+                <h2 className="panel-title">Diagramas de esfuerzos</h2>
+                <span className="font-mono text-[10px] text-slate-500">
+                  {formatNumber(autoDiagramFactor * diagramScale)}×
+                </span>
+              </div>
+              <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-1">
+                <Toggle
+                  label="Mostrar diagramas 3D"
+                  checked={showForceDiagrams}
+                  onChange={setShowForceDiagrams}
+                />
+                <Toggle
+                  label="Etiquetas de extremos"
+                  checked={showDiagramLabels}
+                  onChange={setShowDiagramLabels}
+                />
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-1">
+                {FORCE_COMPONENTS.map((component) => (
+                  <button
+                    key={component}
+                    type="button"
+                    className={cn(
+                      "btn px-0 py-1 font-mono text-[10px]",
+                      diagramComponents.includes(component) && "btn-active",
+                    )}
+                    onClick={() => toggleDiagramComponent(component)}
+                  >
+                    {FORCE_COMPONENT_LABELS[component]}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-1.5 flex items-center gap-3 text-[9px] text-slate-500">
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-sm bg-cyan-400" /> positivo
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-sm bg-rose-400" /> negativo
+                </span>
+              </div>
+              <div className="mt-2">
+                <label className="field-label">
+                  <span>Escala</span>
+                  <span className="field-value">{diagramScale.toFixed(2)}× auto</span>
+                </label>
+                <input
+                  type="range"
+                  min={0.05}
+                  max={5}
+                  step={0.05}
+                  value={diagramScale}
+                  disabled={!showForceDiagrams}
+                  onChange={(event) => setDiagramScale(Number(event.target.value))}
+                />
+              </div>
             </section>
 
             <section>
@@ -416,6 +802,11 @@ export default function ControlSidebar({
                   label="Vectores de carga"
                   checked={showLoads}
                   onChange={setShowLoads}
+                />
+                <Toggle
+                  label="Reacciones en apoyos"
+                  checked={showReactions}
+                  onChange={setShowReactions}
                 />
                 <Toggle label="Grilla XY" checked={showGrid} onChange={setShowGrid} />
               </div>

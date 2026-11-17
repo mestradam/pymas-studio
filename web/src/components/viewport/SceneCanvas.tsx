@@ -14,6 +14,9 @@ import FrameMesh from "./FrameMesh";
 import NodeMarkers from "./NodeMarkers";
 import ReleaseMarkers from "./ReleaseMarkers";
 import LoadVectors from "./LoadVectors";
+import DeformedStructure from "./DeformedStructure";
+import ForceDiagrams3D from "./ForceDiagrams3D";
+import ReactionVectors from "./ReactionVectors";
 
 const VIEW_DIRECTIONS: Record<ViewPreset, Vec3> = {
   iso: [1, -1, 0.82],
@@ -114,6 +117,10 @@ function FrameScene({
   const showSupports = useModelStore((state) => state.showSupports);
   const showReleases = useModelStore((state) => state.showReleases);
   const showLoads = useModelStore((state) => state.showLoads);
+  const showDeformed = useModelStore((state) => state.showDeformed);
+  const showForceDiagrams = useModelStore((state) => state.showForceDiagrams);
+  const showReactions = useModelStore((state) => state.showReactions);
+  const computedResult = useModelStore((state) => state.computedResult);
 
   if (!model) return null;
 
@@ -127,6 +134,23 @@ function FrameScene({
         sectionScale={sectionScale}
         diagonal={bounds.diagonal}
       />
+      {computedResult && showDeformed && (
+        <DeformedStructure
+          model={model}
+          result={computedResult}
+          diagonal={bounds.diagonal}
+        />
+      )}
+      {computedResult && showForceDiagrams && (
+        <ForceDiagrams3D model={model} result={computedResult} />
+      )}
+      {computedResult && showReactions && (
+        <ReactionVectors
+          model={model}
+          result={computedResult}
+          diagonal={bounds.diagonal}
+        />
+      )}
       <NodeMarkers
         model={model}
         showNodes={showNodes}

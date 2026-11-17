@@ -233,6 +233,25 @@ export function computeEquilibrium(
   };
 }
 
+/** Suma global de reacciones de un resultado (fuerza y momento respecto al origen). */
+export function sumResultReactions(
+  model: PymasModel,
+  result: PatternResultData,
+): { force: Vec3; moment: Vec3 } {
+  let force: Vec3 = [...ZERO];
+  let moment: Vec3 = [...ZERO];
+  for (const [nodeId, reaction] of Object.entries(result.reactions)) {
+    const node = model.nodes[nodeId];
+    if (!node) continue;
+    const reactionForce = vector6ToForce(reaction);
+    const reactionMoment = vector6ToMoment(reaction);
+    const r = nodePosition(node);
+    force = add(force, reactionForce);
+    moment = add(moment, add(reactionMoment, cross(r, reactionForce)));
+  }
+  return { force, moment };
+}
+
 /** Equilibrio de una combinación lineal calculada en el cliente. */
 export function computeCombinationEquilibrium(
   model: PymasModel,

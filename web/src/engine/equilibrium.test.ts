@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { computeAppliedLoads, computeCombinationEquilibrium, computeEquilibrium } from "./equilibrium";
+import {
+  computeAppliedLoads,
+  computeCombinationEquilibrium,
+  computeEquilibrium,
+  sumResultReactions,
+} from "./equilibrium";
+import { computeLinearCombinations } from "./superposition";
 import { allFixtures, closeTo, loadFixture } from "./testUtils";
 
 describe("equilibrium · balance global de todos los fixtures", () => {
@@ -64,6 +70,42 @@ describe("equilibrium · balance global de todos los fixtures", () => {
       expect(summary.balanced).toBe(true);
       expect(summary.relativeForceResidual).toBeLessThanOrEqual(0.002);
       expect(summary.relativeMomentResidual).toBeLessThanOrEqual(0.003);
+    }
+  });
+
+  it("la suma global de reacciones coincide con el balance y expone ΣFx, ΣFy, ΣFz", () => {
+    for (const fixture of allFixtures()) {
+      const { model } = fixture;
+      for (const patternId of model.loadPatternOrder) {
+        const result = model.results[patternId];
+        if (!result) continue;
+        const sum = sumResultReactions(model, result);
+        const summary = computeEquilibrium(model, patternId, result);
+        for (let index = 0; index < 3; index += 1) {
+          expect(
+            closeTo(sum.force[index] ?? 0, summary.reactions.force[index] ?? 0, 1e-9, 1e-9),
+          ).toBe(true);
+          expect(
+            closeTo(sum.moment[index] ?? 0, summary.reactions.moment[index] ?? 0, 1e-9, 1e-9),
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("F3: la suma de reacciones de una combinación en vivo coincide con su equilibrio", () => {
+    const { model } = loadFixture("F3_analisis_reparacion.json");
+    const combinations = computeLinearCombinations(model);
+    for (const combination of Object.values(model.loadCombinations)) {
+      const result = combinations[combination.id];
+      if (!result) continue;
+      const sum = sumResultReactions(model, result);
+      const summary = computeCombinationEquilibrium(model, combination);
+      for (let index = 0; index < 3; index += 1) {
+        expect(
+          closeTo(sum.force[index] ?? 0, summary.reactions.force[index] ?? 0, 1e-9, 1e-9),
+        ).toBe(true);
+      }
     }
   });
 });
