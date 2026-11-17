@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
-import { GizmoHelper, GizmoViewcube, OrbitControls } from "@react-three/drei";
+import { GizmoHelper, GizmoViewport, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { useModelStore, type ViewPreset } from "../../store/useModelStore";
 import {
@@ -277,13 +277,10 @@ export default function SceneCanvas() {
       />
 
       <GizmoHelper alignment="bottom-right" margin={[68, 68]}>
-        <GizmoViewcube
-          faces={["+X", "-X", "+Y", "-Y", "+Z", "-Z"]}
-          color="#0f172a"
-          hoverColor="#1e293b"
-          textColor="#e2e8f0"
-          strokeColor="#334155"
-          opacity={0.96}
+        <GizmoViewport
+          axisColors={["#ef4444", "#22c55e", "#3b82f6"]}
+          labelColor="#e2e8f0"
+          hideNegativeAxes={false}
         />
       </GizmoHelper>
     </Canvas>
