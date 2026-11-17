@@ -189,7 +189,13 @@ ambos formatos y normaliza todo a un modelo interno:
 * Render alámbrico o extruido; color por material, sección o uniforme.
 * Capas: nudos, etiquetas, apoyos, rótulas, cargas y grilla.
 * Los vectores de carga se filtran por patrón activo y se autoescalan.
-* La barra inferior verifica `ΣF` y `ΣM` contra las reacciones exportadas.
+* Casos de resultado: patrón exportado, combinación calculada en vivo y
+  envolventes `ENV_MAX`/`ENV_MIN` sobre las combinaciones activas.
+* Deformada elástica por Hermite con escala automática/amplificable, estructura
+  fantasma, animación armónica y mapa de calor `|U|`, `ux`, `uy`, `uz` o deriva.
+* Diagramas 3D de `Fx…Mz` en sus planos locales, con relleno por signo y
+  etiquetas en los extremos; reacciones en apoyos con `ΣFx`, `ΣFy`, `ΣFz`.
+* La barra inferior verifica `ΣF` y `ΣM` contra las reacciones del caso activo.
 * El motor `engine/diagrams.ts` entrega diagramas listos para dibujar: estaciones,
   puntos indeformados, ordenadas en ejes locales, picos, interpolación para el
   cursor y auto-escala. Sus pruebas comparan todos los fixtures, las 17
@@ -200,13 +206,14 @@ ambos formatos y normaliza todo a un modelo interno:
 * **Fase 1** (tipos, parser, geometría, superposición, equilibrio y Vitest):
   completada.
 * **Fase 2** (viewport 3D Z-up, drag & drop, selector de ejemplos, vistas CAD,
-  cubo de orientación, secciones extruidas, colores, apoyos, rótulas y cargas):
-  completada.
-* **Validación de diagramas**: `engine/diagrams.ts` y sus pruebas unitarias
-  verifican estaciones, proyección en ejes locales, picos, convención de extremos,
-  combinaciones lineales y envolventes contra los 12 fixtures reales.
-* Pendiente para fases siguientes: render 3D de la deformada y de los diagramas,
-  reacciones en 3D, inspector 2D, combinaciones en la UI, comparador de fases y
+  cubo de orientación, secciones extruidas, colores, apoyos, rótulas, cargas,
+  deformada con mapa de calor, combinaciones/envolventes en vivo, diagramas 3D
+  y reacciones): completada.
+* **Validación de diagramas**: `engine/diagrams.ts`, `engine/deformation.ts` y sus
+  pruebas unitarias verifican estaciones, proyección en ejes locales, picos,
+  convención de extremos, interpolación de Hermite, combinaciones lineales y
+  envolventes contra los 12 fixtures reales.
+* Pendiente para fases siguientes: inspector 2D, comparador de fases y
   empaquetado final del puente Python.
 
 ## Licencia
