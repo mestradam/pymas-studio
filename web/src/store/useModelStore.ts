@@ -15,11 +15,13 @@ import {
   combineLoadCombination,
   envelopeAcrossCombinations,
 } from "../engine/superposition";
+import { compareModels, type ModelComparison } from "../engine/comparison";
 
 export type RenderMode = "wire" | "extruded";
 export type ViewPreset = "iso" | "plan" | "front" | "side";
 export type ProjectionMode = "perspective" | "orthographic";
 export type ResultMode = "pattern" | "combination" | "env_max" | "env_min";
+export type CompareView = "overlay" | "split";
 
 const FALLBACK_SAMPLES: SampleEntry[] = [
   ["simple_beam.json", "Viga simplemente apoyada", "beam"],
@@ -81,6 +83,12 @@ interface DerivedResults {
   error: string | null;
 }
 
+interface DerivedCompareResult {
+  result: PatternResultData | null;
+  caseLabel: string | null;
+  error: string | null;
+}
+
 /**
  * Resuelve el caso activo en el cliente:
  *  - `pattern`: resultado base exportado del patrón.
@@ -121,6 +129,69 @@ function deriveResults(
     };
   } catch (error) {
     return { result: null, envelope: null, error: errorMessage(error) };
+  }
+}
+
+/**
+ * Resuelve el caso activo en el modelo B. Si el patrón o la combinación
+ * seleccionados no existen en B se usa el primero disponible; así el
+ * comparador sigue funcionando con exportadores que renombran casos.
+ */
+function deriveCompareResult(
+  model: PymasModel | null,
+  mode: ResultMode,
+  patternId: string | null,
+  combinationId: string | null,
+  combinationIds: readonly string[],
+): DerivedCompareResult {
+  if (!model) return { result: null, caseLabel: null, error: null };
+
+  try {
+    if (mode === "pattern") {
+      const id =
+        patternId && model.results[patternId]
+          ? patternId
+          : model.resultOrder[0] ?? null;
+      if (!id) return { result: null, caseLabel: null, error: null };
+      return {
+        result: model.results[id] ?? null,
+        caseLabel: model.loadPatterns[id]?.name ?? id,
+        error: null,
+      };
+    }
+
+    if (mode === "combination") {
+      const id =
+        combinationId && model.loadCombinations[combinationId]
+          ? combinationId
+          : model.loadCombinationOrder[0] ?? null;
+      const combination = id ? model.loadCombinations[id] : undefined;
+      if (!id || !combination) {
+        return { result: null, caseLabel: null, error: null };
+      }
+      const computed = combineLoadCombination(model, combination);
+      return {
+        result: "min" in computed ? computed.max : computed,
+        caseLabel: combination.name || id,
+        error: null,
+      };
+    }
+
+    const ids = combinationIds.filter((id) => model.loadCombinations[id]);
+    const effective = ids.length > 0 ? ids : model.loadCombinationOrder;
+    if (effective.length === 0) {
+      return { result: null, caseLabel: null, error: null };
+    }
+    const envelope = envelopeAcrossCombinations(model, effective);
+    return {
+      result: mode === "env_max" ? envelope.max : envelope.min,
+      caseLabel: `${mode === "env_max" ? "ENV MAX" : "ENV MIN"} · ${
+        effective.length
+      }/${model.loadCombinationOrder.length}`,
+      error: null,
+    };
+  } catch (error) {
+    return { result: null, caseLabel: null, error: errorMessage(error) };
   }
 }
 
@@ -182,6 +253,21 @@ export interface ModelState {
   projection: ProjectionMode;
   fitToken: number;
   viewToken: number;
+
+  /** Comparador A/B (fase 4). */
+  compareEnabled: boolean;
+  compareModel: PymasModel | null;
+  compareSourceLabel: string | null;
+  compareSourceFile: string | null;
+  compareLoading: boolean;
+  compareError: string | null;
+  compareResult: PatternResultData | null;
+  compareCaseLabel: string | null;
+  compareResultError: string | null;
+  compareComparison: ModelComparison | null;
+  compareView: CompareView;
+  compareHeatmap: boolean;
+  comparePanelOpen: boolean;
 }
 
 export interface ModelActions {
@@ -226,6 +312,19 @@ export interface ModelActions {
   setProjection: (projection: ProjectionMode) => void;
   toggleProjection: () => void;
   fitView: () => void;
+
+  setCompareEnabled: (enabled: boolean) => void;
+  setCompareView: (view: CompareView) => void;
+  setCompareHeatmap: (enabled: boolean) => void;
+  setComparePanelOpen: (open: boolean) => void;
+  loadCompareFromFile: (file: File) => Promise<void>;
+  loadCompareSample: (entry: SampleEntry) => Promise<void>;
+  loadCompareText: (
+    text: string,
+    label: string,
+    sourceFile?: string | null,
+  ) => Promise<void>;
+  clearCompare: () => void;
 }
 
 export type ModelStore = ModelState & ModelActions;
@@ -283,6 +382,20 @@ const INITIAL_STATE: ModelState = {
   projection: "perspective",
   fitToken: 0,
   viewToken: 0,
+
+  compareEnabled: false,
+  compareModel: null,
+  compareSourceLabel: null,
+  compareSourceFile: null,
+  compareLoading: false,
+  compareError: null,
+  compareResult: null,
+  compareCaseLabel: null,
+  compareResultError: null,
+  compareComparison: null,
+  compareView: "overlay",
+  compareHeatmap: true,
+  comparePanelOpen: false,
 };
 
 export const useModelStore = create<ModelStore>((set) => {
@@ -320,6 +433,17 @@ export const useModelStore = create<ModelStore>((set) => {
         selectedNodeId: null,
         chartStation: null,
         resultsTablesOpen: false,
+        compareEnabled: false,
+        compareModel: null,
+        compareSourceLabel: null,
+        compareSourceFile: null,
+        compareLoading: false,
+        compareError: null,
+        compareResult: null,
+        compareCaseLabel: null,
+        compareResultError: null,
+        compareComparison: null,
+        comparePanelOpen: false,
         fitToken: state.fitToken + 1,
         viewToken: state.viewToken + 1,
         loadingModel: false,
@@ -342,11 +466,70 @@ export const useModelStore = create<ModelStore>((set) => {
       combinationId,
       combinationIds,
     );
+    const compare = deriveCompareResult(
+      state.compareModel,
+      mode,
+      patternId,
+      combinationId,
+      combinationIds,
+    );
+    const comparison =
+      state.model && state.compareModel && derived.result && compare.result
+        ? compareModels(
+            state.model,
+            derived.result,
+            state.compareModel,
+            compare.result,
+          )
+        : null;
     return {
       computedResult: derived.result,
       envelope: derived.envelope,
       resultError: derived.error,
+      compareResult: compare.result,
+      compareCaseLabel: compare.caseLabel,
+      compareResultError: compare.error,
+      compareComparison: comparison,
     };
+  };
+
+  const applyCompareModel = (
+    compareModel: PymasModel,
+    label: string,
+    sourceFile: string | null,
+  ): void => {
+    set((state) => {
+      const compare = deriveCompareResult(
+        compareModel,
+        state.resultMode,
+        state.activePatternId,
+        state.activeCombinationId,
+        state.activeCombinationIds,
+      );
+      const comparison =
+        state.model && state.computedResult && compare.result
+          ? compareModels(
+              state.model,
+              state.computedResult,
+              compareModel,
+              compare.result,
+            )
+          : null;
+      return {
+        compareModel,
+        compareSourceLabel: label,
+        compareSourceFile: sourceFile,
+        compareLoading: false,
+        compareError: null,
+        compareEnabled: true,
+        comparePanelOpen: true,
+        compareResult: compare.result,
+        compareCaseLabel: compare.caseLabel,
+        compareResultError: compare.error,
+        compareComparison: comparison,
+        fitToken: state.fitToken + 1,
+      };
+    });
   };
 
   return {
@@ -452,6 +635,76 @@ export const useModelStore = create<ModelStore>((set) => {
         });
       }
     },
+
+    loadCompareFromFile: async (file) => {
+      set({ compareLoading: true, compareError: null });
+      await tick();
+      try {
+        const text = await file.text();
+        const parsed = parsePymasJson(text, file.name);
+        applyCompareModel(parsed, file.name, null);
+      } catch (error) {
+        set({
+          compareLoading: false,
+          compareError: errorMessage(error),
+          comparePanelOpen: true,
+        });
+      }
+    },
+
+    loadCompareSample: async (entry) => {
+      set({ compareLoading: true, compareError: null });
+      await tick();
+      try {
+        const url = assetUrl(`samples/${entry.file}`);
+        const response = await fetch(url, { cache: "no-cache" });
+        if (!response.ok) {
+          throw new Error(
+            `No se pudo cargar el ejemplo para comparar (HTTP ${response.status}).`,
+          );
+        }
+        assertJsonResponse(response.headers.get("content-type"), url);
+        const text = await response.text();
+        const parsed = parsePymasJson(text, entry.label);
+        applyCompareModel(parsed, entry.label, entry.file);
+      } catch (error) {
+        set({
+          compareLoading: false,
+          compareError: errorMessage(error),
+          comparePanelOpen: true,
+        });
+      }
+    },
+
+    loadCompareText: async (text, label, sourceFile = null) => {
+      set({ compareLoading: true, compareError: null });
+      await tick();
+      try {
+        const parsed = parsePymasJson(text, label);
+        applyCompareModel(parsed, label, sourceFile);
+      } catch (error) {
+        set({
+          compareLoading: false,
+          compareError: errorMessage(error),
+          comparePanelOpen: true,
+        });
+      }
+    },
+
+    clearCompare: () =>
+      set({
+        compareEnabled: false,
+        compareModel: null,
+        compareSourceLabel: null,
+        compareSourceFile: null,
+        compareLoading: false,
+        compareError: null,
+        compareResult: null,
+        compareCaseLabel: null,
+        compareResultError: null,
+        compareComparison: null,
+        comparePanelOpen: false,
+      }),
 
     dismissError: () => set({ error: null }),
 
@@ -617,5 +870,15 @@ export const useModelStore = create<ModelStore>((set) => {
         viewToken: state.viewToken + 1,
       })),
     fitView: () => set((state) => ({ fitToken: state.fitToken + 1 })),
+
+    setCompareEnabled: (compareEnabled) => set({ compareEnabled }),
+    setCompareView: (compareView) =>
+      set((state) => ({
+        compareView,
+        fitToken: state.fitToken + 1,
+        viewToken: state.viewToken + 1,
+      })),
+    setCompareHeatmap: (compareHeatmap) => set({ compareHeatmap }),
+    setComparePanelOpen: (comparePanelOpen) => set({ comparePanelOpen }),
   };
 });

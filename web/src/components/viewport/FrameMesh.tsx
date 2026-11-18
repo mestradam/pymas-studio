@@ -18,6 +18,8 @@ interface FrameMeshProps {
   opacity: number;
   sectionScale: number;
   diagonal: number;
+  /** Sustituye el color por barra (por ejemplo, mapa de calor A/B). */
+  colorForFrame?: (frameId: string) => string | null;
 }
 
 interface ExtrudedFrame {
@@ -34,6 +36,7 @@ export default function FrameMesh({
   opacity,
   sectionScale,
   diagonal,
+  colorForFrame,
 }: FrameMeshProps) {
   const wire = useMemo(() => {
     const positions: number[] = [];
@@ -42,12 +45,14 @@ export default function FrameMesh({
       const frame = model.frames[frameId];
       if (!frame) continue;
       const { p1, p2 } = framePositions(frame, model.nodes);
-      const color = new THREE.Color(frameColor(frame, model, colorMode));
+      const color = new THREE.Color(
+        colorForFrame?.(frameId) ?? frameColor(frame, model, colorMode),
+      );
       positions.push(...p1, ...p2);
       colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
     }
     return { positions: new Float32Array(positions), colors: new Float32Array(colors) };
-  }, [model, colorMode]);
+  }, [model, colorMode, colorForFrame]);
 
   const extruded = useMemo<ExtrudedFrame[]>(() => {
     const entries: ExtrudedFrame[] = [];
@@ -86,11 +91,11 @@ export default function FrameMesh({
           Math.max(dims.dy * sectionScale, minDimension),
           Math.max(dims.dz * sectionScale, minDimension),
         ],
-        color: frameColor(frame, model, colorMode),
+        color: colorForFrame?.(frameId) ?? frameColor(frame, model, colorMode),
       });
     }
     return entries;
-  }, [model, colorMode, sectionScale, diagonal]);
+  }, [model, colorMode, sectionScale, diagonal, colorForFrame]);
 
   if (renderMode === "wire") {
     return (
