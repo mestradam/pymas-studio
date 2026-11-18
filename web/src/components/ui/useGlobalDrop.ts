@@ -6,11 +6,23 @@ function hasFiles(event: DragEvent): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes("Files");
 }
 
-/** Global drag & drop: any .json dropped anywhere in the window is loaded. */
-export function useGlobalDrop(): boolean {
+export interface GlobalDropState {
+  active: boolean;
+  /** Cantidad de JSON válidos observados en el último drag (para la pista). */
+  jsonCount: number;
+}
+
+/**
+ * Drag & drop global:
+ *  - 1 JSON: reemplaza el modelo base A.
+ *  - 2 JSON: el primero se carga como A y el segundo como B (comparador).
+ *
+ * Los archivos se validan y renderizan localmente; nada sale del navegador.
+ */
+export function useGlobalDrop(): GlobalDropState {
   const [dragging, setDragging] = useState(false);
+  const [jsonCount, setJsonCount] = useState(1);
   const depth = useRef(0);
-  const loadFromFile = useModelStore((state) => state.loadFromFile);
 
   useEffect(() => {
     const onDragEnter = (event: DragEvent) => {
@@ -18,6 +30,10 @@ export function useGlobalDrop(): boolean {
       event.preventDefault();
       depth.current += 1;
       setDragging(true);
+      const items = Array.from(event.dataTransfer?.items ?? []).filter(
+        (item) => item.kind === "file",
+      );
+      if (items.length > 0) setJsonCount(items.length);
     };
 
     const onDragOver = (event: DragEvent) => {
@@ -39,8 +55,20 @@ export function useGlobalDrop(): boolean {
       depth.current = 0;
       setDragging(false);
       const files = Array.from(event.dataTransfer?.files ?? []);
-      const file = files.find(isJsonFile) ?? files[0];
-      if (file) void loadFromFile(file);
+      const jsonFiles = files.filter(isJsonFile);
+      const usable = jsonFiles.length > 0 ? jsonFiles : files.slice(0, 1);
+      if (usable.length === 0) return;
+
+      void (async () => {
+        const state = useModelStore.getState();
+        if (usable.length >= 2) {
+          // Secuencial: A debe quedar aplicado antes de resolver el caso de B.
+          await state.loadFromFile(usable[0] as File);
+          await useModelStore.getState().loadCompareFromFile(usable[1] as File);
+        } else {
+          await state.loadFromFile(usable[0] as File);
+        }
+      })();
     };
 
     window.addEventListener("dragenter", onDragEnter);
@@ -53,7 +81,7 @@ export function useGlobalDrop(): boolean {
       window.removeEventListener("dragleave", onDragLeave);
       window.removeEventListener("drop", onDrop);
     };
-  }, [loadFromFile]);
+  }, []);
 
-  return dragging;
+  return { active: dragging, jsonCount };
 }

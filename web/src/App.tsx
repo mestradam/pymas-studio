@@ -11,6 +11,7 @@ import ErrorToast from "./components/ui/ErrorToast";
 import DropZoneOverlay from "./components/ui/DropZoneOverlay";
 import ElementInspector from "./components/ui/ElementInspector";
 import ResultsTables from "./components/ui/ResultsTables";
+import ComparePanel, { CompareLegend } from "./components/ui/ComparePanel";
 import { useGlobalDrop } from "./components/ui/useGlobalDrop";
 
 export default function App() {
@@ -22,7 +23,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(
     () => typeof window === "undefined" || window.innerWidth >= 1024,
   );
-  const dragging = useGlobalDrop();
+  const dropState = useGlobalDrop();
   const booted = useRef(false);
 
   useEffect(() => {
@@ -67,6 +68,10 @@ export default function App() {
         state.setResultsTablesOpen(false);
         return;
       }
+      if (state.comparePanelOpen) {
+        state.setComparePanelOpen(false);
+        return;
+      }
       if (state.selectedFrameId || state.selectedNodeId) {
         state.clearSelection();
       }
@@ -100,6 +105,9 @@ export default function App() {
 
           <ElementInspector />
 
+          <ComparePanel />
+          <CompareLegend />
+
           {model && (
             <div className="pointer-events-none absolute bottom-3 left-3 z-10 hidden items-center gap-2 rounded-lg border border-white/10 bg-slate-950/70 px-2 py-1 text-[10px] text-slate-500 backdrop-blur sm:flex">
               <span className="font-mono text-sky-400">Z↑</span>
@@ -112,7 +120,7 @@ export default function App() {
             </div>
           )}
 
-          <DropZoneOverlay active={dragging} />
+          <DropZoneOverlay active={dropState.active} count={dropState.jsonCount} />
         </main>
 
         <ControlSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />

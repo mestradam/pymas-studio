@@ -1,7 +1,15 @@
-import { Box, Loader2, Maximize2, SlidersHorizontal, Table2 } from "lucide-react";
+import {
+  Box,
+  GitCompareArrows,
+  Loader2,
+  Maximize2,
+  SlidersHorizontal,
+  Table2,
+} from "lucide-react";
 import { useModelStore, type ViewPreset } from "../../store/useModelStore";
 import { cn } from "../../lib/utils";
 import OpenFileButton from "./OpenFileButton";
+import ExportMenu from "./ExportMenu";
 
 const VIEWS: Array<{ id: ViewPreset; label: string; title: string }> = [
   { id: "iso", label: "3D", title: "Vista isométrica" },
@@ -33,6 +41,10 @@ export default function TopToolbar({
   const fitView = useModelStore((state) => state.fitView);
   const resultsTablesOpen = useModelStore((state) => state.resultsTablesOpen);
   const setResultsTablesOpen = useModelStore((state) => state.setResultsTablesOpen);
+  const compareModel = useModelStore((state) => state.compareModel);
+  const comparePanelOpen = useModelStore((state) => state.comparePanelOpen);
+  const setComparePanelOpen = useModelStore((state) => state.setComparePanelOpen);
+  const setCompareEnabled = useModelStore((state) => state.setCompareEnabled);
 
   return (
     <header className="relative z-30 flex h-14 shrink-0 items-center gap-2 border-b border-white/10 bg-slate-950/80 px-3 backdrop-blur-md">
@@ -129,6 +141,29 @@ export default function TopToolbar({
           <Table2 size={14} />
           <span className="hidden sm:inline">Tablas</span>
         </button>
+
+        <button
+          type="button"
+          className={cn("btn relative h-8", comparePanelOpen && "btn-active")}
+          onClick={() => {
+            if (!comparePanelOpen) {
+              setComparePanelOpen(true);
+              if (compareModel) setCompareEnabled(true);
+            } else {
+              setComparePanelOpen(false);
+            }
+          }}
+          title="Comparar modelo base A con un modelo modificado B"
+          disabled={!model}
+        >
+          <GitCompareArrows size={14} />
+          <span className="hidden sm:inline">Comparar</span>
+          {compareModel && (
+            <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          )}
+        </button>
+
+        <ExportMenu />
 
         <button
           type="button"
