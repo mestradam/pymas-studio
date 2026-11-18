@@ -9,6 +9,8 @@ import WelcomeOverlay from "./components/ui/WelcomeOverlay";
 import LoadingOverlay from "./components/ui/LoadingOverlay";
 import ErrorToast from "./components/ui/ErrorToast";
 import DropZoneOverlay from "./components/ui/DropZoneOverlay";
+import ElementInspector from "./components/ui/ElementInspector";
+import ResultsTables from "./components/ui/ResultsTables";
 import { useGlobalDrop } from "./components/ui/useGlobalDrop";
 
 export default function App() {
@@ -57,6 +59,22 @@ export default function App() {
       : "PyMAS Studio 3D";
   }, [model]);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const state = useModelStore.getState();
+      if (state.resultsTablesOpen) {
+        state.setResultsTablesOpen(false);
+        return;
+      }
+      if (state.selectedFrameId || state.selectedNodeId) {
+        state.clearSelection();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const loading = loadingModel || (!model && loadingSamples);
 
   return (
@@ -80,6 +98,8 @@ export default function App() {
 
           <ErrorToast />
 
+          <ElementInspector />
+
           {model && (
             <div className="pointer-events-none absolute bottom-3 left-3 z-10 hidden items-center gap-2 rounded-lg border border-white/10 bg-slate-950/70 px-2 py-1 text-[10px] text-slate-500 backdrop-blur sm:flex">
               <span className="font-mono text-sky-400">Z↑</span>
@@ -98,6 +118,7 @@ export default function App() {
         <ControlSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       </div>
 
+      <ResultsTables />
       <EquilibriumBar />
     </div>
   );

@@ -4,6 +4,7 @@ import {
   autoDeformationScale,
   buildDeformation,
   buildDeformedFrame,
+  deformedPointAt,
   hermiteInterpolateVectors,
 } from "./deformation";
 import { framePositions, modelBounds, type Vec3 } from "./geometry";
@@ -255,5 +256,84 @@ describe("mapa de calor", () => {
     expect(high[0]).toBeGreaterThan(high[2]);
     expect(heatmapRange([3, -2, 7, Number.NaN])).toEqual({ min: -2, max: 7 });
     expect(heatmapRange([])).toEqual({ min: 0, max: 0 });
+  });
+});
+
+describe("deformada · punto en estación (cursor 2D/3D)", () => {
+  it("reproduce las estaciones densificadas y los extremos", () => {
+    const { model } = loadFixture("space_frame.json");
+    const result = firstResult(model);
+    const curve = buildDeformedFrame(model, result, model.frameOrder[0] ?? "", {
+      scale: 5,
+      subdivisions: 4,
+    });
+
+    for (let index = 0; index < curve.stations.length; index += 1) {
+      const point = deformedPointAt(curve, curve.stations[index] ?? 0);
+      expect(maxDeviation(point, curve.deformedPoints[index] ?? [0, 0, 0])).toBeLessThan(1e-12);
+    }
+
+    expect(
+      maxDeviation(
+        deformedPointAt(curve, 0),
+        curve.deformedPoints[0] ?? [0, 0, 0],
+      ),
+    ).toBeLessThan(1e-12);
+    expect(
+      maxDeviation(
+        deformedPointAt(curve, 1),
+        curve.deformedPoints[curve.deformedPoints.length - 1] ?? [0, 0, 0],
+      ),
+    ).toBeLessThan(1e-12);
+  });
+
+  it("interpola linealmente entre estaciones y acota fuera de rango", () => {
+    const { model } = loadFixture("space_frame.json");
+    const result = firstResult(model);
+    const curve = buildDeformedFrame(model, result, model.frameOrder[0] ?? "", {
+      scale: 5,
+      subdivisions: 4,
+    });
+    const middleIndex = Math.floor(curve.stations.length / 2);
+    const x0 = curve.stations[middleIndex] ?? 0;
+    const x1 = curve.stations[middleIndex + 1] ?? 1;
+    const p0 = curve.deformedPoints[middleIndex] ?? [0, 0, 0];
+    const p1 = curve.deformedPoints[middleIndex + 1] ?? [0, 0, 0];
+    const midpoint = deformedPointAt(curve, (x0 + x1) / 2);
+    const expected: Vec3 = [
+      (p0[0] + p1[0]) / 2,
+      (p0[1] + p1[1]) / 2,
+      (p0[2] + p1[2]) / 2,
+    ];
+    expect(maxDeviation(midpoint, expected)).toBeLessThan(1e-12);
+
+    expect(
+      maxDeviation(
+        deformedPointAt(curve, -2),
+        curve.deformedPoints[0] ?? [0, 0, 0],
+      ),
+    ).toBeLessThan(1e-12);
+    expect(
+      maxDeviation(
+        deformedPointAt(curve, 3),
+        curve.deformedPoints[curve.deformedPoints.length - 1] ?? [0, 0, 0],
+      ),
+    ).toBeLessThan(1e-12);
+  });
+
+  it("tolera curvas vacías o degeneradas", () => {
+    const empty = {
+      frameId: "x",
+      sourceStations: [],
+      stations: [],
+      undeformedPoints: [],
+      localDisplacements: [],
+      globalDisplacements: [],
+      deformedPoints: [],
+      isVertical: false,
+      maxMagnitude: 0,
+      heat: { magnitude: [], ux: [], uy: [], uz: [], drift: [] },
+    } satisfies Parameters<typeof deformedPointAt>[0];
+    expect(deformedPointAt(empty, 0.5)).toEqual([0, 0, 0]);
   });
 });

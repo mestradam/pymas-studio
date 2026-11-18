@@ -17,6 +17,9 @@ import LoadVectors from "./LoadVectors";
 import DeformedStructure from "./DeformedStructure";
 import ForceDiagrams3D from "./ForceDiagrams3D";
 import ReactionVectors from "./ReactionVectors";
+import SelectionTargets from "./SelectionTargets";
+import SelectionHighlight from "./SelectionHighlight";
+import ChartCursorMarker from "./ChartCursorMarker";
 
 const VIEW_DIRECTIONS: Record<ViewPreset, Vec3> = {
   iso: [1, -1, 0.82],
@@ -172,6 +175,11 @@ function FrameScene({
           diagonal={bounds.diagonal}
         />
       )}
+      <SelectionTargets model={model} diagonal={bounds.diagonal} />
+      <SelectionHighlight model={model} diagonal={bounds.diagonal} />
+      {computedResult && (
+        <ChartCursorMarker model={model} diagonal={bounds.diagonal} />
+      )}
     </group>
   );
 }
@@ -196,6 +204,17 @@ export default function SceneCanvas() {
   const view = useModelStore((state) => state.view);
   const fitToken = useModelStore((state) => state.fitToken);
   const viewToken = useModelStore((state) => state.viewToken);
+  const clearSelection = useModelStore((state) => state.clearSelection);
+  const pointerDown = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const handleDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      pointerDown.current = { x: event.clientX, y: event.clientY };
+    };
+    window.addEventListener("pointerdown", handleDown, true);
+    return () => window.removeEventListener("pointerdown", handleDown, true);
+  }, []);
 
   const bounds = useMemo<ModelBounds>(
     () => (model ? modelBounds(model) : nodeBounds([])),
@@ -233,6 +252,17 @@ export default function SceneCanvas() {
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         gl.toneMappingExposure = 1.1;
+      }}
+      onPointerMissed={(event) => {
+        const start = pointerDown.current;
+        pointerDown.current = null;
+        if (!start || event.button !== 0) return;
+        const travelled = Math.hypot(
+          event.clientX - start.x,
+          event.clientY - start.y,
+        );
+        if (travelled > 5) return;
+        clearSelection();
       }}
     >
       <color attach="background" args={["#060a13"]} />

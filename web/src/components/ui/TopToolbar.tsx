@@ -1,4 +1,4 @@
-import { Box, Loader2, Maximize2, SlidersHorizontal } from "lucide-react";
+import { Box, Loader2, Maximize2, SlidersHorizontal, Table2 } from "lucide-react";
 import { useModelStore, type ViewPreset } from "../../store/useModelStore";
 import { cn } from "../../lib/utils";
 import OpenFileButton from "./OpenFileButton";
@@ -31,6 +31,8 @@ export default function TopToolbar({
   const projection = useModelStore((state) => state.projection);
   const toggleProjection = useModelStore((state) => state.toggleProjection);
   const fitView = useModelStore((state) => state.fitView);
+  const resultsTablesOpen = useModelStore((state) => state.resultsTablesOpen);
+  const setResultsTablesOpen = useModelStore((state) => state.setResultsTablesOpen);
 
   return (
     <header className="relative z-30 flex h-14 shrink-0 items-center gap-2 border-b border-white/10 bg-slate-950/80 px-3 backdrop-blur-md">
@@ -115,6 +117,17 @@ export default function TopToolbar({
           title="Alternar cámara perspectiva / ortográfica"
         >
           {projection === "perspective" ? "Persp." : "Orto."}
+        </button>
+
+        <button
+          type="button"
+          className={cn("btn h-8", resultsTablesOpen && "btn-active")}
+          onClick={() => setResultsTablesOpen(!resultsTablesOpen)}
+          title="Tablas de resultados"
+          disabled={!model}
+        >
+          <Table2 size={14} />
+          <span className="hidden sm:inline">Tablas</span>
         </button>
 
         <button

@@ -195,6 +195,16 @@ ambos formatos y normaliza todo a un modelo interno:
   fantasma, animación armónica y mapa de calor `|U|`, `ux`, `uy`, `uz` o deriva.
 * Diagramas 3D de `Fx…Mz` en sus planos locales, con relleno por signo y
   etiquetas en los extremos; reacciones en apoyos con `ΣFx`, `ΣFy`, `ΣFz`.
+* **Selección interactiva** por clic sobre barras y nudos (modo alámbrico y
+  extruido), con resaltado luminoso y cierre con `Esc` o clic en vacío.
+* **Inspector de elemento** en panel lateral: ficha técnica, liberaciones,
+  `end_actions` I/J, desplazamiento y reacción nodales, y siete gráficos SVG
+  (`Fx`, `Fy`, `Fz`, `Mx`, `My`, `Mz` y deflexión local). El cursor de los
+  gráficos está sincronizado entre sí y proyecta un marcador naranja sobre la
+  barra 3D (sobre la deformada si está activa).
+* **Tablas de resultados** filtrables y ordenables: desplazamientos nodales,
+  reacciones en apoyos y máximos absolutos por barra, con filtros por material,
+  sección o tipo de apoyo. Cada fila abre el inspector del elemento en el visor.
 * La barra inferior verifica `ΣF` y `ΣM` contra las reacciones del caso activo.
 * El motor `engine/diagrams.ts` entrega diagramas listos para dibujar: estaciones,
   puntos indeformados, ordenadas en ejes locales, picos, interpolación para el
@@ -213,8 +223,11 @@ ambos formatos y normaliza todo a un modelo interno:
   pruebas unitarias verifican estaciones, proyección en ejes locales, picos,
   convención de extremos, interpolación de Hermite, combinaciones lineales y
   envolventes contra los 12 fixtures reales.
-* Pendiente para fases siguientes: inspector 2D, comparador de fases y
-  empaquetado final del puente Python.
+* **Inspector 2D y tablas de resultados** (Fase 4 del plan): completados con
+  selección por raycasting, gráficos sincronizados con el marcador 3D, ficha de
+  barras y nudos y tablas filtrables/ordenables.
+* Pendiente para fases siguientes: comparador de modelos/fases, exportación de
+  entregables, GitHub Pages y empaquetado final del puente Python.
 
 ## Licencia
 
