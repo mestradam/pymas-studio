@@ -34,8 +34,74 @@ la ventana, o usar el botón **Abrir JSON**.
 | `npm run dev` | Sincroniza `fixtures/` y arranca Vite. |
 | `npm test` | Ejecuta Vitest contra los JSON reales de `fixtures/`. |
 | `npm run build` | Sincroniza ejemplos, valida TypeScript y genera `web/dist/`. |
+| `npm run build:python` | Copia `web/dist/` dentro de `python/pymas_studio/static/`. |
+| `npm run package:python` | Compila y copia los estáticos en un solo paso. |
 | `npm run preview` | Sirve localmente el build de producción. |
 | `npm run samples:sync` | Copia `fixtures/` a `web/public/samples/` y genera `manifest.json`. |
+
+## Despliegue web (GitHub Pages)
+
+`vite.config.ts` usa `base: "./"`, por lo que el contenido de `web/dist/` es
+portable a cualquier subruta. No hay backend ni recursos externos: modelos,
+muestras y assets se sirven desde el mismo sitio estático.
+
+El workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
+compila `web/`, ejecuta las pruebas y publica `web/dist/` en GitHub Pages al
+hacer push a `main` (también puede lanzarse manualmente con
+`workflow_dispatch`). En el repositorio de GitHub habilita
+**Settings → Pages → Source: GitHub Actions**.
+
+La URL publicada admite los mismos parámetros que el entorno local:
+
+```text
+https://<usuario>.github.io/<repositorio>/
+https://<usuario>.github.io/<repositorio>/?model=simple_beam.json
+https://<usuario>.github.io/<repositorio>/?model=samples/eiffel_tower.json
+https://<usuario>.github.io/<repositorio>/?model=https://ejemplo.com/modelo.json
+```
+
+## Paquete Python `pymas_studio`
+
+El visor también puede abrirse desde un notebook o script de `pymas` con un
+servidor local efímero. El paquete usa únicamente la biblioteca estándar.
+
+```bash
+# Desde la raíz del repositorio: compila, copia estáticos e instala editable
+make install-python
+
+# Alternativa sin make
+cd web && npm install && npm run build && npm run build:python
+cd .. && python3 -m pip install -e ./python
+```
+
+Uso desde cualquier carpeta del sistema:
+
+```python
+import pymas_studio
+
+# Ruta a una exportación de pymas
+pymas_studio.show("fixtures/F3_analisis_reparacion.json")
+
+# Diccionario con el esquema pymas
+pymas_studio.show(modelo_dict)
+
+# Objeto de pymas con .to_dict() o .export_json()
+pymas_studio.show(modelo)
+
+# Puerto fijo, sin abrir el navegador (devuelve la URL)
+url = pymas_studio.show(modelo, port=8765, open_browser=False)
+print(url)  # http://127.0.0.1:8765/?model=model.json
+```
+
+`show()` sirve `web/dist/` (o `python/pymas_studio/static/` cuando el paquete
+está empaquetado), expone el modelo en `/model.json` y abre
+`http://127.0.0.1:<puerto>/?model=model.json`. El servidor corre en un hilo
+daemon. Desde terminal:
+
+```bash
+python3 -m pymas_studio fixtures/space_frame.json
+pymas-studio fixtures/space_frame.json   # consola instalada por el paquete
+```
 
 ## Flujo de trabajo Git (Atlassian Gitflow)
 
@@ -132,8 +198,8 @@ git push origin main develop --tags
 
 ### Estado actual de las ramas
 
-* `main`: plano del proyecto y fixtures originales.
-* `develop`: implementación de la Fase 1 y trabajo en curso.
+* `main`: versión estable desplegada en GitHub Pages.
+* `develop`: integración de las fases 1–5 completadas.
 
 ## Estructura
 
@@ -142,16 +208,23 @@ pymas-studio/
 ├── PYMAS_STUDIO_PLAN.md       # Plano maestro
 ├── LICENSE                    # Licencia MIT
 ├── fixtures/                  # 12 exportaciones reales de pymas
+├── Makefile                   # Atajos: build, tests, estáticos y paquete Python
 ├── web/                       # React + TypeScript + Vite + Three.js
 │   ├── public/samples/        # Generado en cada build (no versionado)
 │   ├── scripts/sync-samples.mjs
+│   ├── scripts/sync-python-static.mjs
 │   └── src/
 │       ├── types/pymas.ts     # Contrato crudo + modelo normalizado
 │       ├── engine/            # parser, geometría, superposición, diagramas, equilibrio
 │       ├── store/             # Zustand
 │       └── components/        # viewport 3D + UI
-├── python/                    # Puente opcional para notebooks (`pymas_studio.show`)
-└── .github/workflows/         # Despliegue a GitHub Pages
+├── python/                    # Paquete `pymas_studio` y puente HTTP local
+│   ├── pyproject.toml
+│   ├── pymas_studio/
+│   │   ├── server.py          # show() + ThreadingHTTPServer estándar
+│   │   └── static/            # Copia de web/dist al empaquetar (no versionada)
+│   └── tests/test_server.py
+└── .github/workflows/         # Despliegue a GitHub Pages (`deploy.yml`)
 ```
 
 ## Hallazgos de la auditoría de `fixtures/`
@@ -226,8 +299,13 @@ ambos formatos y normaliza todo a un modelo interno:
 * **Inspector 2D y tablas de resultados** (Fase 4 del plan): completados con
   selección por raycasting, gráficos sincronizados con el marcador 3D, ficha de
   barras y nudos y tablas filtrables/ordenables.
-* Pendiente para fases siguientes: comparador de modelos/fases, exportación de
-  entregables, GitHub Pages y empaquetado final del puente Python.
+* **Comparador y entregables** (Fase 5 del plan): comparador A/B de modelos o
+  fases con cámaras sincronizadas (superposición y división), mapa de calor de
+  demandas y exportación de PNG de alta resolución (fondo oscuro o blanco) y CSV
+  de reacciones y envolventes.
+* **Despliegue y paquete Python** (Fase 5 del plan): build portable para GitHub
+  Pages con workflow automático, carga por `?model=` y paquete `pymas_studio`
+  basado sólo en la biblioteca estándar que sirve el visor y el modelo local.
 
 ## Licencia
 
