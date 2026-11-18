@@ -1,17 +1,18 @@
-"""Minimal local HTTP bridge between pymas and the static PyMAS Studio app.
+"""Puente HTTP local entre `pymas` y la aplicación estática PyMAS Studio.
 
-Usage
------
+Uso
+---
 ::
 
     import pymas_studio
 
-    pymas_studio.show(model)             # dict, JSON string or path
-    pymas_studio.show("model.json", port=8765)
+    pymas_studio.show(modelo)                  # dict de Python
+    pymas_studio.show("modelo.json")           # ruta a un export de pymas
+    pymas_studio.show(modelo, port=8765)       # puerto fijo
 
-The server runs in a daemon thread, so notebooks remain interactive. From a
-plain script keep the process alive (``input()``/``time.sleep``) or pass
-``block=True``.
+El servidor corre en un hilo daemon para no bloquear notebooks. Desde un script
+normal mantén el proceso vivo (``input()``/``time.sleep``) o usa
+``block=True`` desde la línea de comandos.
 """
 
 from __future__ import annotations
@@ -21,50 +22,83 @@ import threading
 import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Union
+from urllib.parse import urlsplit
 
 ModelLike = Union[dict, str, Path, Any]
 
-_API_PATH = "/api/model.json"
+# La app resuelve `?model=model.json` como un ejemplo (`samples/model.json`);
+# el servidor expone el modelo en las tres rutas para que funcione tanto el
+# enlace amigable como los clientes que usan la API explícita.
+_MODEL_PATHS = frozenset({"/model.json", "/samples/model.json", "/api/model.json"})
+_VIEWER_URL_PATH = "/?model=model.json"
 
 
-def _model_to_text(model: ModelLike) -> str:
-    """Serialize a model given as dict, JSON text, path or pymas object."""
-    if isinstance(model, Path):
-        return model.read_text(encoding="utf-8")
+def _json_text(value: Any) -> str:
+    """Serializa a JSON validando el resultado antes de servirlo."""
+    text = json.dumps(value, ensure_ascii=False)
+    json.loads(text)
+    return text
 
-    if isinstance(model, str):
-        stripped = model.lstrip()
+
+def _model_to_text(source: ModelLike) -> str:
+    """Convierte una ruta, dict, texto JSON u objeto de pymas a texto JSON."""
+    if isinstance(source, Path):
+        return source.expanduser().read_text(encoding="utf-8")
+
+    if isinstance(source, (bytes, bytearray)):
+        return source.decode("utf-8")
+
+    if isinstance(source, str):
+        stripped = source.lstrip("\ufeff \t\r\n")
         if stripped.startswith("{") or stripped.startswith("["):
-            json.loads(stripped)  # validate early with a clear error
+            json.loads(stripped)  # valida temprano con un error claro
             return stripped
-        path = Path(model).expanduser()
-        if path.exists():
+        path = Path(source).expanduser()
+        if path.is_file():
             return path.read_text(encoding="utf-8")
-        raise FileNotFoundError(f"No existe el archivo de modelo: {model}")
+        raise FileNotFoundError(
+            f"No existe el archivo de modelo: {source}. "
+            "Pasa una ruta .json, un dict o un objeto con .to_dict()/.export_json()."
+        )
 
-    if isinstance(model, dict):
-        return json.dumps(model, ensure_ascii=False)
+    if isinstance(source, dict):
+        return _json_text(source)
 
-    for attribute in ("to_json", "toJSON", "model_dump_json"):
-        serializer = getattr(model, attribute, None)
-        if callable(serializer):
+    # Objetos de pymas: acepta el contrato documentado y variantes habituales.
+    for attribute in (
+        "to_dict",
+        "model_dump",
+        "to_json",
+        "toJSON",
+        "model_dump_json",
+        "export_json",
+    ):
+        serializer = getattr(source, attribute, None)
+        if not callable(serializer):
+            continue
+        try:
             result = serializer()
-            if isinstance(result, str):
-                return result
-            return json.dumps(result, ensure_ascii=False)
+        except TypeError:
+            # Algunos exportadores sólo aceptan una ruta obligatoria.
+            continue
+        if isinstance(result, str):
+            json.loads(result)
+            return result
+        return _json_text(result)
 
     raise TypeError(
-        "`show` espera un dict, una ruta/JSON de texto o un objeto con `to_json()`."
+        "`show` espera una ruta .json, un dict de Python o un objeto que "
+        "exponga `.to_dict()` o `.export_json()`."
     )
 
 
 def _static_directory() -> Path:
-    """Locate the compiled frontend.
+    """Localiza el frontend compilado.
 
-    Priority:
-      1. ``pymas_studio/static`` (copied during packaging).
-      2. ``web/dist`` inside the repository (development checkout).
+    Prioridad:
+      1. ``pymas_studio/static`` (copiado durante el empaquetado).
+      2. ``web/dist`` dentro del repositorio (checkout de desarrollo).
     """
     package_static = Path(__file__).resolve().parent / "static"
     if (package_static / "index.html").is_file():
@@ -76,8 +110,7 @@ def _static_directory() -> Path:
 
     raise FileNotFoundError(
         "No se encontró el frontend compilado. Ejecuta `cd web && npm run build` "
-        "y copia `web/dist/` a `python/pymas_studio/static/`, o instala el paquete "
-        "con los datos estáticos incluidos."
+        "y luego `npm run build:python` (o `make python-static`)."
     )
 
 
@@ -88,8 +121,10 @@ def _make_handler(
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, directory=str(directory), **kwargs)
 
-        def do_GET(self) -> None:  # noqa: N802 (stdlib naming)
-            if self.path.split("?", 1)[0] == _API_PATH:
+        def do_GET(self) -> None:  # noqa: N802 (nombre de la stdlib)
+            path = urlsplit(self.path).path
+
+            if path in _MODEL_PATHS:
                 payload = model_text.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -100,54 +135,59 @@ def _make_handler(
                 self.wfile.write(payload)
                 return
 
-            # Single-page app: unknown routes fall back to index.html.
-            requested = self.translate_path(self.path)
-            if not Path(requested).exists() and "." not in Path(self.path).name:
+            # Single-page app: las rutas sin extensión caen a index.html.
+            requested = Path(self.translate_path(self.path))
+            if not requested.exists() and "." not in Path(path).name:
                 self.path = "/index.html"
             super().do_GET()
 
+        def end_headers(self) -> None:
+            self.send_header("X-Content-Type-Options", "nosniff")
+            super().end_headers()
+
         def log_message(self, format: str, *args: Any) -> None:
-            # Keep notebooks and terminals quiet.
+            # Mantiene silenciosos los notebooks y la terminal.
             return
 
     return StudioHandler
 
 
 def show(
-    model: ModelLike,
+    source: ModelLike,
     port: int = 0,
     open_browser: bool = True,
     host: str = "127.0.0.1",
     block: bool = False,
 ) -> str:
-    """Serve ``model`` locally and open the static viewer.
+    """Sirve ``source`` en un servidor local y abre el visor estático.
 
-    Parameters
+    Parámetros
     ----------
-    model:
-        Dict, JSON text, path or object exposing ``to_json()``.
+    source:
+        Ruta a un ``.json``, ``dict`` de Python, texto JSON o cualquier objeto
+        que exponga ``.to_dict()`` o ``.export_json()``.
     port:
-        TCP port; ``0`` lets the operating system choose a free one.
+        Puerto TCP; ``0`` delega al sistema operativo la elección de uno libre.
     open_browser:
-        Open the viewer with :mod:`webbrowser`.
+        Abre el visor con :mod:`webbrowser`.
     host:
-        Interface to bind. Keep the default loopback address unless you need
-        to expose the viewer on a network.
+        Interfaz de escucha. Se mantiene en loopback por seguridad.
     block:
-        If true, serve in the foreground until interrupted.
+        Si es ``True``, sirve en primer plano hasta interrumpir con Ctrl+C.
 
-    Returns
-    -------
+    Devuelve
+    --------
     str
-        The viewer URL, including ``?model=/api/model.json``.
+        URL del visor, con ``?model=model.json``.
     """
-    model_text = _model_to_text(model)
+    model_text = _model_to_text(source)
     directory = _static_directory()
     handler = _make_handler(directory, model_text)
     server = ThreadingHTTPServer((host, port), handler)
     server.daemon_threads = True
     actual_port = server.server_address[1]
-    url = f"http://{host}:{actual_port}/?model={_API_PATH}"
+    display_host = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host
+    url = f"http://{display_host}:{actual_port}{_VIEWER_URL_PATH}"
 
     if block:
         if open_browser:
@@ -171,8 +211,3 @@ def show(
         webbrowser.open(url)
 
     return url
-
-
-def _resolve_model(model: ModelLike) -> Tuple[str, Path]:
-    """Internal helper kept for the CLI entry point."""
-    return _model_to_text(model), _static_directory()

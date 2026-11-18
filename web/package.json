@@ -14,6 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "samples:sync": "node scripts/sync-samples.mjs",
+    "build:python": "node scripts/sync-python-static.mjs",
+    "package:python": "npm run build && npm run build:python",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
