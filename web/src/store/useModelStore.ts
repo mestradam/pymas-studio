@@ -170,6 +170,14 @@ export interface ModelState {
   showLoads: boolean;
   showGrid: boolean;
 
+  /** Barra seleccionada en el visor (raycasting). */
+  selectedFrameId: string | null;
+  /** Nudo seleccionado en el visor (raycasting). */
+  selectedNodeId: string | null;
+  /** Estación normalizada 0..1 del cursor de los gráficos del inspector. */
+  chartStation: number | null;
+  resultsTablesOpen: boolean;
+
   view: ViewPreset;
   projection: ProjectionMode;
   fitToken: number;
@@ -209,6 +217,11 @@ export interface ModelActions {
   setShowReleases: (value: boolean) => void;
   setShowLoads: (value: boolean) => void;
   setShowGrid: (value: boolean) => void;
+  selectFrame: (frameId: string | null) => void;
+  selectNode: (nodeId: string | null) => void;
+  clearSelection: () => void;
+  setChartStation: (station: number | null) => void;
+  setResultsTablesOpen: (open: boolean) => void;
   setView: (view: ViewPreset) => void;
   setProjection: (projection: ProjectionMode) => void;
   toggleProjection: () => void;
@@ -261,6 +274,11 @@ const INITIAL_STATE: ModelState = {
   showLoads: true,
   showGrid: true,
 
+  selectedFrameId: null,
+  selectedNodeId: null,
+  chartStation: null,
+  resultsTablesOpen: false,
+
   view: "iso",
   projection: "perspective",
   fitToken: 0,
@@ -298,6 +316,10 @@ export const useModelStore = create<ModelStore>((set) => {
         resultError: derived.error,
         colorMode: defaultColorMode(model),
         view: defaultView(model),
+        selectedFrameId: null,
+        selectedNodeId: null,
+        chartStation: null,
+        resultsTablesOpen: false,
         fitToken: state.fitToken + 1,
         viewToken: state.viewToken + 1,
         loadingModel: false,
@@ -557,6 +579,34 @@ export const useModelStore = create<ModelStore>((set) => {
     setShowReleases: (showReleases) => set({ showReleases }),
     setShowLoads: (showLoads) => set({ showLoads }),
     setShowGrid: (showGrid) => set({ showGrid }),
+    selectFrame: (frameId) =>
+      set((state) => {
+        if (frameId !== null && !state.model?.frames[frameId]) return state;
+        return {
+          selectedFrameId: frameId,
+          selectedNodeId: null,
+          chartStation: null,
+        };
+      }),
+    selectNode: (nodeId) =>
+      set((state) => {
+        if (nodeId !== null && !state.model?.nodes[nodeId]) return state;
+        return {
+          selectedFrameId: null,
+          selectedNodeId: nodeId,
+          chartStation: null,
+        };
+      }),
+    clearSelection: () =>
+      set({ selectedFrameId: null, selectedNodeId: null, chartStation: null }),
+    setChartStation: (station) =>
+      set({
+        chartStation:
+          station === null || !Number.isFinite(station)
+            ? null
+            : Math.min(1, Math.max(0, station)),
+      }),
+    setResultsTablesOpen: (resultsTablesOpen) => set({ resultsTablesOpen }),
     setView: (view) => set((state) => ({ view, viewToken: state.viewToken + 1 })),
     setProjection: (projection) =>
       set((state) => ({ projection, viewToken: state.viewToken + 1 })),

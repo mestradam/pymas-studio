@@ -413,6 +413,44 @@ export function autoDeformationScale(
   return maximum > 1e-15 && Number.isFinite(maximum) ? target / maximum : 1;
 }
 
+/** Punto de la curva deformada en una estación normalizada 0..1. */
+export function deformedPointAt(
+  curve: DeformedFrameCurve,
+  station: number,
+): Vec3 {
+  const points = curve.deformedPoints;
+  if (points.length === 0) return [0, 0, 0];
+  const stations = curve.stations;
+  if (stations.length !== points.length) return [...(points[0] ?? [0, 0, 0])];
+
+  const first = stations[0] ?? 0;
+  const last = stations[stations.length - 1] ?? 1;
+  if (!Number.isFinite(station) || station <= first) {
+    return [...(points[0] ?? [0, 0, 0])];
+  }
+  if (station >= last) {
+    return [...(points[points.length - 1] ?? [0, 0, 0])];
+  }
+
+  for (let index = 0; index < stations.length - 1; index += 1) {
+    const x0 = stations[index];
+    const x1 = stations[index + 1];
+    if (x0 === undefined || x1 === undefined) continue;
+    if (station >= x0 && station <= x1) {
+      const p0 = points[index] ?? [0, 0, 0];
+      const p1 = points[index + 1] ?? [0, 0, 0];
+      if (Math.abs(x1 - x0) < 1e-15) return [...p1];
+      const t = (station - x0) / (x1 - x0);
+      return [
+        p0[0] + (p1[0] - p0[0]) * t,
+        p0[1] + (p1[1] - p0[1]) * t,
+        p0[2] + (p1[2] - p0[2]) * t,
+      ];
+    }
+  }
+  return [...(points[points.length - 1] ?? [0, 0, 0])];
+}
+
 /** Distancia entre extremos deformados; útil para pruebas y encuadres. */
 export function deformedSpan(curve: DeformedFrameCurve): number {
   const first = curve.deformedPoints[0];
