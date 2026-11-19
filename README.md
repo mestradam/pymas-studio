@@ -22,6 +22,7 @@ modelo concreto con el parámetro `?model=`:
 http://127.0.0.1:5173/?model=simple_beam.json
 http://127.0.0.1:5173/?model=samples/eiffel_tower.json
 http://127.0.0.1:5173/?model=https://ejemplo.com/modelo.json
+http://127.0.0.1:5173/?model=simple_beam.json&up=y
 ```
 
 Además, puedes arrastrar y soltar cualquier `.json` exportado por `pymas` sobre
@@ -237,8 +238,14 @@ pymas-studio/
 
 ## Convenciones y controles
 
-* **Z-up**: la grilla se dibuja en el plano `XY`.
-* Vistas: isométrica, planta `XY`, elevación frontal `XZ` y lateral `YZ`.
+* **Z-up** por defecto: la grilla se dibuja en el plano `XY`.
+* **Eje vertical intercambiable** (`X↑`, `Y↑`, `Z↑`) desde el panel lateral o
+  con `?up=x|y|z` en la URL; la elección se recuerda en el navegador. El modelo
+  se rota en bloque (permutación cíclica de ejes, sin espejos); la grilla, las
+  vistas CAD, el gizmo, los apoyos y la deriva del mapa de calor siguen al eje
+  elegido.
+* Vistas: isométrica, planta, elevación frontal y lateral. Con `Z↑` son `XY`,
+  `XZ` y `YZ`; con `Y↑`, `ZX`, `ZY` y `XY`; con `X↑`, `YZ`, `YX` y `ZX`.
 * Cámara perspectiva/ortográfica con encuadre automático.
 * Render alámbrico o extruido; color por material, sección o uniforme.
 * Capas: nudos, etiquetas, apoyos, rótulas, cargas y grilla.
