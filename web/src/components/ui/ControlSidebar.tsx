@@ -10,6 +10,7 @@ import {
 import { autoDiagramScale, FORCE_COMPONENTS } from "../../engine/diagrams";
 import { formatNumber } from "../../engine/geometry";
 import { HEATMAP_GRADIENT } from "../../engine/heatmap";
+import { UP_AXES, viewPlaneLabel } from "../../engine/upAxis";
 import { cn } from "../../lib/utils";
 
 const MODEL_TYPE_LABELS: Record<string, string> = {
@@ -19,12 +20,7 @@ const MODEL_TYPE_LABELS: Record<string, string> = {
   space_truss: "Cercha espacial",
 };
 
-const VIEW_OPTIONS = [
-  ["iso", "3D"],
-  ["plan", "XY"],
-  ["front", "XZ"],
-  ["side", "YZ"],
-] as const;
+const VIEW_OPTIONS = ["iso", "plan", "front", "side"] as const;
 
 const RESULT_MODE_OPTIONS = [
   ["pattern", "Patrón"],
@@ -112,6 +108,8 @@ export default function ControlSidebar({
   const showReactions = useModelStore((state) => state.showReactions);
   const view = useModelStore((state) => state.view);
   const setView = useModelStore((state) => state.setView);
+  const upAxis = useModelStore((state) => state.upAxis);
+  const setUpAxis = useModelStore((state) => state.setUpAxis);
   const projection = useModelStore((state) => state.projection);
   const toggleProjection = useModelStore((state) => state.toggleProjection);
   const renderMode = useModelStore((state) => state.renderMode);
@@ -191,11 +189,11 @@ export default function ControlSidebar({
   const heatRange = useMemo(() => {
     if (!model || !computedResult || heatmapMode === "none") return null;
     try {
-      return deformationHeatRange(model, computedResult, heatmapMode);
+      return deformationHeatRange(model, computedResult, heatmapMode, upAxis);
     } catch {
       return null;
     }
-  }, [model, computedResult, heatmapMode]);
+  }, [model, computedResult, heatmapMode, upAxis]);
 
   const activeCaseLabel = useMemo(() => {
     if (!model) return "—";
@@ -324,16 +322,38 @@ export default function ControlSidebar({
             <section>
               <h2 className="panel-title mb-1.5">Vista de cámara</h2>
               <div className="grid grid-cols-4 gap-1">
-                {VIEW_OPTIONS.map(([id, label]) => (
+                {VIEW_OPTIONS.map((id) => (
                   <button
                     key={id}
                     type="button"
                     className={cn("btn px-0 py-1 text-[10px]", view === id && "btn-active")}
                     onClick={() => setView(id)}
                   >
-                    {label}
+                    {id === "iso" ? "3D" : viewPlaneLabel(id, upAxis)}
                   </button>
                 ))}
+              </div>
+              <div className="mt-1 flex items-center gap-1">
+                <span className="w-[72px] shrink-0 text-[10px] text-slate-500">
+                  Eje vertical
+                </span>
+                <div className="grid flex-1 grid-cols-3 gap-1">
+                  {UP_AXES.map((axis) => (
+                    <button
+                      key={axis}
+                      type="button"
+                      className={cn(
+                        "btn px-0 py-1 text-[10px]",
+                        upAxis === axis && "btn-active",
+                      )}
+                      onClick={() => setUpAxis(axis)}
+                      title={`Mostrar el eje ${axis.toUpperCase()} del modelo hacia arriba`}
+                      aria-pressed={upAxis === axis}
+                    >
+                      {axis.toUpperCase()}↑
+                    </button>
+                  ))}
+                </div>
               </div>
               <button
                 type="button"
