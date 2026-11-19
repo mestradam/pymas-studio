@@ -1,7 +1,7 @@
 {
   "name": "pymas-studio-web",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "PyMAS Studio 3D - visor estático de modelos estructurales PyMAS",
   "license": "MIT",

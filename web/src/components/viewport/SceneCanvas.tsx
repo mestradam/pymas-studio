@@ -7,6 +7,7 @@ import {
   type RenderMode,
   type ViewPreset,
 } from "../../store/useModelStore";
+import { useThemeStore } from "../../store/useThemeStore";
 import {
   modelBounds,
   nodeBounds,
@@ -27,6 +28,7 @@ import SelectionTargets from "./SelectionTargets";
 import SelectionHighlight from "./SelectionHighlight";
 import ChartCursorMarker from "./ChartCursorMarker";
 import { registerCapture, type CaptureBackground } from "./captureRegistry";
+import { applyCapturePalette } from "./capturePalette";
 
 const VIEW_DIRECTIONS: Record<ViewPreset, Vec3> = {
   iso: [1, -1, 0.82],
@@ -172,6 +174,8 @@ function ModelLayer({
   const opacity = useModelStore((state) => state.opacity);
   const sectionScale = useModelStore((state) => state.sectionScale);
   const loadScale = useModelStore((state) => state.loadScale);
+  const loadArrowMode = useModelStore((state) => state.loadArrowMode);
+  const heatmapMode = useModelStore((state) => state.heatmapMode);
   const activePatternId = useModelStore((state) => state.activePatternId);
   const showNodes = useModelStore((state) => state.showNodes);
   const showLabels = useModelStore((state) => state.showLabels);
@@ -186,6 +190,8 @@ function ModelLayer({
     <group>
       <FrameMesh
         model={model}
+        result={result}
+        heatmapMode={heatmapMode}
         renderMode={renderModeOverride ?? renderMode}
         colorMode={colorMode}
         opacity={opacityOverride ?? opacity}
@@ -231,6 +237,7 @@ function ModelLayer({
           patternId={activePatternId}
           loadScale={loadScale}
           diagonal={bounds.diagonal}
+          arrowMode={loadArrowMode}
         />
       )}
       {selectable && (
@@ -246,12 +253,19 @@ function ModelLayer({
 
 function Grid({ bounds }: { bounds: ModelBounds }) {
   const showGrid = useModelStore((state) => state.showGrid);
+  const theme = useThemeStore((state) => state.theme);
   const grid = useMemo(() => niceGridSize(bounds.diagonal), [bounds.diagonal]);
   if (!showGrid) return null;
 
+  const light = theme === "light";
   return (
     <gridHelper
-      args={[grid.size, grid.divisions, "#334155", "#111c2e"]}
+      args={[
+        grid.size,
+        grid.divisions,
+        light ? "#b3c0ce" : "#334155",
+        light ? "#e1e8ef" : "#111c2e",
+      ]}
       position={[bounds.center[0], bounds.center[1], 0]}
       rotation={[Math.PI / 2, 0, 0]}
     />
@@ -342,10 +356,22 @@ function CaptureBridge({ id }: { id: string }) {
       const previousRatio = gl.getPixelRatio();
       const previousSize = gl.getSize(new THREE.Vector2());
       const previousBackground = scene.background;
+      const previousToneMapping = gl.toneMapping;
+      const brightenDark =
+        background === "dark" && useThemeStore.getState().theme === "light";
+      const restorePalette = applyCapturePalette(
+        scene,
+        background,
+        brightenDark,
+      );
       try {
         scene.background = new THREE.Color(
           background === "white" ? "#ffffff" : "#060a13",
         );
+        // Sin tone mapping los colores de captura conservan la saturación.
+        if (background === "white" || brightenDark) {
+          gl.toneMapping = THREE.NoToneMapping;
+        }
         gl.setPixelRatio(scale);
         gl.setSize(size.width, size.height, false);
         gl.render(scene, camera);
@@ -358,7 +384,9 @@ function CaptureBridge({ id }: { id: string }) {
         context.drawImage(source, 0, 0);
         return output;
       } finally {
+        restorePalette();
         scene.background = previousBackground;
+        gl.toneMapping = previousToneMapping;
         gl.setPixelRatio(previousRatio);
         gl.setSize(previousSize.x, previousSize.y, false);
         gl.render(scene, camera);
@@ -390,6 +418,8 @@ function ScenePane({
   const view = useModelStore((state) => state.view);
   const fitToken = useModelStore((state) => state.fitToken);
   const viewToken = useModelStore((state) => state.viewToken);
+  const theme = useThemeStore((state) => state.theme);
+  const light = theme === "light";
   const pointerDown = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -449,17 +479,21 @@ function ScenePane({
         onBackgroundClick();
       }}
     >
-      <color attach="background" args={["#060a13"]} />
+      <color attach="background" args={[light ? "#f8fafc" : "#060a13"]} />
 
-      <ambientLight intensity={0.42} />
-      <hemisphereLight args={["#dbeafe", "#0f172a", 0.95]} />
+      <ambientLight intensity={light ? 0.72 : 0.42} />
+      <hemisphereLight
+        args={
+          light ? ["#ffffff", "#dbe4ee", 0.62] : ["#dbeafe", "#0f172a", 0.95]
+        }
+      />
       <directionalLight
         position={[
           bounds.center[0] + bounds.diagonal * 1.2,
           bounds.center[1] - bounds.diagonal * 1.6,
           bounds.center[2] + bounds.diagonal * 2.1,
         ]}
-        intensity={1.7}
+        intensity={light ? 1.15 : 1.7}
       />
       <directionalLight
         position={[
@@ -467,8 +501,8 @@ function ScenePane({
           bounds.center[1] + bounds.diagonal * 1.2,
           bounds.center[2] + bounds.diagonal * 0.9,
         ]}
-        color="#93c5fd"
-        intensity={0.55}
+        color={light ? "#dbeafe" : "#93c5fd"}
+        intensity={light ? 0.32 : 0.55}
       />
 
       <Grid bounds={bounds} />
@@ -487,7 +521,7 @@ function ScenePane({
       <GizmoHelper alignment="bottom-right" margin={[68, 68]}>
         <GizmoViewport
           axisColors={["#ef4444", "#22c55e", "#3b82f6"]}
-          labelColor="#e2e8f0"
+          labelColor={light ? "#0f172a" : "#e2e8f0"}
           hideNegativeAxes={false}
         />
       </GizmoHelper>

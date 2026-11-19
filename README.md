@@ -114,7 +114,7 @@ original, y `develop` como rama de integración.
 
 | Rama | Propósito | Reglas |
 | --- | --- | --- |
-| `main` | Código estable y desplegable. | Sólo recibe merges desde `release/*` y `hotfix/*`. Cada merge se etiqueta con una versión. Sin commits directos. |
+| `main` | Código estable y desplegable. | Recibe merges desde `develop`. Si el proyecto crece, puede pasar a recibir merges sólo desde `release/*` y `hotfix/*`. Cada merge se etiqueta con una versión. Sin commits directos. |
 | `develop` | Integración del trabajo en curso. | Recibe merges desde `feature/*` mediante Pull Request. Es la base para nuevas funcionalidades y releases. Sin commits directos. |
 
 ### Ramas de apoyo
@@ -127,6 +127,11 @@ original, y `develop` como rama de integración.
 
 Los nombres deben ser descriptivos y en minúsculas, por ejemplo
 `feature/inspector-barras`, `release/0.2.0` o `hotfix/0.1.1`.
+
+Para el tamaño actual del proyecto, `main` se actualiza directamente desde
+`develop` al cerrar cada versión. Más adelante se puede adoptar el flujo
+completo con ramas `release/*` para estabilización y `hotfix/*` para
+correcciones urgentes, sin cambiar el resto del flujo.
 
 ### Ciclo de una funcionalidad
 
@@ -149,6 +154,10 @@ Después se abre un **Pull Request de `feature/inspector-barras` hacia
 se fusiona con merge commit (`--no-ff`) y se elimina la rama de funcionalidad.
 
 ### Publicación de una versión
+
+Con el flujo simplificado actual, se fusiona `develop` en `main` con `--no-ff`
+y se crea el tag correspondiente. Cuando se adopte el esquema con `release/*`,
+el procedimiento será:
 
 ```bash
 git switch -c release/0.2.0 develop
@@ -205,7 +214,6 @@ git push origin main develop --tags
 
 ```text
 pymas-studio/
-├── PYMAS_STUDIO_PLAN.md       # Plano maestro
 ├── LICENSE                    # Licencia MIT
 ├── fixtures/                  # 12 exportaciones reales de pymas
 ├── Makefile                   # Atajos: build, tests, estáticos y paquete Python
@@ -226,33 +234,6 @@ pymas-studio/
 │   └── tests/test_server.py
 └── .github/workflows/         # Despliegue a GitHub Pages (`deploy.yml`)
 ```
-
-## Hallazgos de la auditoría de `fixtures/`
-
-Los 12 archivos reales difieren del contrato inicial del plano. El parser acepta
-ambos formatos y normaliza todo a un modelo interno:
-
-* Nivel superior con `type` + `degrees_of_freedom` (no `model`).
-* Nudos en `joints` (no `nodes`); `y`/`z` pueden faltar en modelos 2D.
-* Barras con `joint_j` / `joint_k` (no `node_i` / `node_j`).
-* Apoyos con `r_ux`, `r_uy`, … (no `ux`, `uy`, …).
-* Patrones con `joints` / `frames`; cada carga trae su `joint` o `frame`.
-* `end_actions` plano (`fx_j`, `fx_k`, …).
-* `stations` opcionales: si faltan se usan `[0, 0.25, 0.5, 0.75, 1]`.
-* No hay `units`, `nu`, `rho`, `releases` ni `type` en combinaciones.
-* `load_combinations` sólo aparece en `F3_analisis_reparacion.json` y son lineales.
-* Los `local_axes` exportados son autoritativos; se recalculan sólo si faltan.
-* Las cargas distribuidas `fx/fy/fz` se interpretan como componentes **locales**;
-  las nodales son **globales**. Esto es necesario para que el equilibrio cierre.
-* `internal_forces` e `internal_displacements` se exportan en el sistema **local**
-  de cada barra. Los diagramas se proyectan con los `local_axes` del modelo; en
-  `space_frame` la proyección local reproduce los 6 componentes nodales y en
-  `space_truss` sólo se exporta la componente axial `ux`.
-* Los extremos de las series respetan la convención de `end_actions`:
-  `fx=-fx_j`, `fy=+fy_j`, `fz=+fz_j`, `mx=-mx_j`, `my=+my_j`, `mz=-mz_j` en el
-  nudo I y signos opuestos en el nudo J.
-* `Section` (cerchas) no trae `dy`/`dz`; se deriva un tamaño visual desde `A`.
-* F3 usa `MAT_E` (existente) y `MAT_N` (reforzamiento), con colores distintivos.
 
 ## Convenciones y controles
 

@@ -3,7 +3,6 @@ import { Box, CircleDot, X } from "lucide-react";
 import { useModelStore } from "../../store/useModelStore";
 import { formatNumber } from "../../engine/geometry";
 import {
-  FRAME_CHART_COLORS,
   FRAME_CHART_LABELS,
   buildFrameChartSeries,
   interpolateSeriesAt,
@@ -131,7 +130,8 @@ function FrameChart({
       : interpolateSeriesAt(series.stations, series.values, station);
   const cursorX = station === null ? null : xAt(station);
   const cursorY = cursorValue === null ? zeroY : yAt(cursorValue);
-  const color = FRAME_CHART_COLORS[series.key];
+  // El color del trazo sale de los tokens CSS para adaptarse al tema activo.
+  const color = `var(--chart-${series.key})`;
 
   const handlePointer = (
     event: React.PointerEvent<SVGSVGElement>,
@@ -178,7 +178,7 @@ function FrameChart({
           x2={width - padding}
           y1={zeroY}
           y2={zeroY}
-          stroke="#334155"
+          stroke="var(--chart-zero)"
           strokeWidth={0.7}
         />
         <line
@@ -186,7 +186,7 @@ function FrameChart({
           x2={width - padding}
           y1={zeroY - halfHeight}
           y2={zeroY - halfHeight}
-          stroke="#1e293b"
+          stroke="var(--chart-grid)"
           strokeWidth={0.5}
           strokeDasharray="2 3"
         />
@@ -195,7 +195,7 @@ function FrameChart({
           x2={width - padding}
           y1={zeroY + halfHeight}
           y2={zeroY + halfHeight}
-          stroke="#1e293b"
+          stroke="var(--chart-grid)"
           strokeWidth={0.5}
           strokeDasharray="2 3"
         />
@@ -216,7 +216,7 @@ function FrameChart({
               x2={cursorX}
               y1={zeroY - halfHeight}
               y2={zeroY + halfHeight}
-              stroke="#f8fafc"
+              stroke="var(--chart-cursor)"
               strokeWidth={0.7}
               strokeDasharray="2 2"
               vectorEffect="non-scaling-stroke"
@@ -225,8 +225,8 @@ function FrameChart({
               cx={cursorX}
               cy={cursorY}
               r={2.4}
-              fill="#fb923c"
-              stroke="#0f172a"
+              fill="var(--chart-dot-fill)"
+              stroke="var(--chart-dot-stroke)"
               strokeWidth={0.8}
             />
           </>

@@ -11,6 +11,7 @@ import {
 } from "../../engine/diagrams";
 import { formatNumber } from "../../engine/geometry";
 import { useModelStore } from "../../store/useModelStore";
+import { useThemeStore } from "../../store/useThemeStore";
 
 interface ForceDiagrams3DProps {
   model: PymasModel;
@@ -19,6 +20,8 @@ interface ForceDiagrams3DProps {
 
 const POSITIVE: [number, number, number] = [0.13, 0.83, 0.93];
 const NEGATIVE: [number, number, number] = [0.98, 0.45, 0.52];
+const POSITIVE_LIGHT: [number, number, number] = [0.02, 0.32, 0.42];
+const NEGATIVE_LIGHT: [number, number, number] = [0.72, 0.06, 0.19];
 
 const COMPONENT_LABELS: Record<ForceComponent, string> = {
   fx: "Fx",
@@ -29,8 +32,12 @@ const COMPONENT_LABELS: Record<ForceComponent, string> = {
   mz: "Mz",
 };
 
-function signColor(value: number): [number, number, number] {
-  return value >= 0 ? POSITIVE : NEGATIVE;
+function signColor(
+  value: number,
+  light: boolean,
+): [number, number, number] {
+  if (value >= 0) return light ? POSITIVE_LIGHT : POSITIVE;
+  return light ? NEGATIVE_LIGHT : NEGATIVE;
 }
 
 interface ExtremeLabel {
@@ -52,6 +59,8 @@ export default function ForceDiagrams3D({
   const components = useModelStore((state) => state.diagramComponents);
   const diagramScale = useModelStore((state) => state.diagramScale);
   const showLabels = useModelStore((state) => state.showDiagramLabels);
+  const theme = useThemeStore((state) => state.theme);
+  const light = theme === "light";
 
   const data = useMemo(() => {
     if (components.length === 0) return null;
@@ -92,18 +101,26 @@ export default function ForceDiagrams3D({
         push(fillPositions, p0);
         push(fillPositions, d0);
         push(fillPositions, d1);
-        fillColors.push(...signColor(v0), ...signColor(v0), ...signColor(v1));
+        fillColors.push(
+          ...signColor(v0, light),
+          ...signColor(v0, light),
+          ...signColor(v1, light),
+        );
 
         // Triángulo 2: base_i, curva_{i+1}, base_{i+1}
         push(fillPositions, p0);
         push(fillPositions, d1);
         push(fillPositions, p1);
-        fillColors.push(...signColor(v0), ...signColor(v1), ...signColor(v1));
+        fillColors.push(
+          ...signColor(v0, light),
+          ...signColor(v1, light),
+          ...signColor(v1, light),
+        );
 
         // Contorno superior del diagrama.
         push(linePositions, d0);
         push(linePositions, d1);
-        lineColors.push(...signColor(v0), ...signColor(v1));
+        lineColors.push(...signColor(v0, light), ...signColor(v1, light));
       }
     }
 
@@ -186,7 +203,7 @@ export default function ForceDiagrams3D({
       },
       labels,
     };
-  }, [model, result, components, diagramScale]);
+  }, [model, result, components, diagramScale, light]);
 
   useEffect(() => {
     if (!data) return;
@@ -222,12 +239,15 @@ export default function ForceDiagrams3D({
               <div
                 className="whitespace-nowrap rounded border px-1 py-0.5 font-mono text-[9px] leading-none shadow-md"
                 style={{
-                  color: label.value >= 0 ? "#a5f3fc" : "#fecdd3",
+                  color:
+                    label.value >= 0
+                      ? "var(--label-positive)"
+                      : "var(--label-negative)",
                   borderColor:
                     label.value >= 0
-                      ? "rgba(34,211,238,0.45)"
-                      : "rgba(251,113,133,0.45)",
-                  backgroundColor: "rgba(2,6,23,0.82)",
+                      ? "var(--label-positive-border)"
+                      : "var(--label-negative-border)",
+                  backgroundColor: "var(--label-bg)",
                 }}
               >
                 {COMPONENT_LABELS[label.component]} {formatNumber(label.value)} {unit}
