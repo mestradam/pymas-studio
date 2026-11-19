@@ -16,6 +16,12 @@ import {
   envelopeAcrossCombinations,
 } from "../engine/superposition";
 import { compareModels, type ModelComparison } from "../engine/comparison";
+import {
+  DEFAULT_UP_AXIS,
+  isUpAxis,
+  presetForPlane,
+  type UpAxis,
+} from "../engine/upAxis";
 
 export type RenderMode = "wire" | "extruded";
 
@@ -62,8 +68,38 @@ function defaultColorMode(model: PymasModel): ColorMode {
   return "uniform";
 }
 
-function defaultView(model: PymasModel): ViewPreset {
-  return /beam|bar/i.test(model.meta.type) ? "plan" : "iso";
+/** Vigas y barras se leen mejor en el plano XY, sea cual sea el eje vertical. */
+function defaultView(model: PymasModel, upAxis: UpAxis): ViewPreset {
+  return /beam|bar/i.test(model.meta.type) ? presetForPlane("X", "Y", upAxis) : "iso";
+}
+
+export const UP_AXIS_STORAGE_KEY = "pymas-studio-up-axis";
+
+/** Eje vertical: `?up=x|y|z` en la URL, luego el último elegido, luego Z. */
+function initialUpAxis(): UpAxis {
+  if (typeof window === "undefined") return DEFAULT_UP_AXIS;
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get("up");
+    const normalized = fromUrl?.trim().toLowerCase();
+    if (isUpAxis(normalized)) return normalized;
+  } catch {
+    // URL inválida: se ignora el parámetro.
+  }
+  try {
+    const stored = window.localStorage.getItem(UP_AXIS_STORAGE_KEY);
+    if (isUpAxis(stored)) return stored;
+  } catch {
+    // localStorage puede estar bloqueado (modo privado, políticas, etc.).
+  }
+  return DEFAULT_UP_AXIS;
+}
+
+function persistUpAxis(upAxis: UpAxis): void {
+  try {
+    window.localStorage.setItem(UP_AXIS_STORAGE_KEY, upAxis);
+  } catch {
+    // La aplicación sigue funcionando aunque no se pueda persistir.
+  }
 }
 
 function errorMessage(error: unknown): string {
@@ -258,6 +294,8 @@ export interface ModelState {
   resultsTablesOpen: boolean;
 
   view: ViewPreset;
+  /** Eje global del modelo que se muestra hacia arriba en el visor. */
+  upAxis: UpAxis;
   projection: ProjectionMode;
   fitToken: number;
   viewToken: number;
@@ -318,6 +356,7 @@ export interface ModelActions {
   setChartStation: (station: number | null) => void;
   setResultsTablesOpen: (open: boolean) => void;
   setView: (view: ViewPreset) => void;
+  setUpAxis: (upAxis: UpAxis) => void;
   setProjection: (projection: ProjectionMode) => void;
   toggleProjection: () => void;
   fitView: () => void;
@@ -389,6 +428,7 @@ const INITIAL_STATE: ModelState = {
   resultsTablesOpen: false,
 
   view: "iso",
+  upAxis: initialUpAxis(),
   projection: "perspective",
   fitToken: 0,
   viewToken: 0,
@@ -438,7 +478,7 @@ export const useModelStore = create<ModelStore>((set) => {
         envelope: derived.envelope,
         resultError: derived.error,
         colorMode: defaultColorMode(model),
-        view: defaultView(model),
+        view: defaultView(model, state.upAxis),
         selectedFrameId: null,
         selectedNodeId: null,
         chartStation: null,
@@ -872,6 +912,19 @@ export const useModelStore = create<ModelStore>((set) => {
       }),
     setResultsTablesOpen: (resultsTablesOpen) => set({ resultsTablesOpen }),
     setView: (view) => set((state) => ({ view, viewToken: state.viewToken + 1 })),
+    setUpAxis: (upAxis) => {
+      persistUpAxis(upAxis);
+      set((state) =>
+        state.upAxis === upAxis
+          ? state
+          : {
+              upAxis,
+              // Las vistas CAD cambian de plano: se re-encuadra la cámara.
+              fitToken: state.fitToken + 1,
+              viewToken: state.viewToken + 1,
+            },
+      );
+    },
     setProjection: (projection) =>
       set((state) => ({ projection, viewToken: state.viewToken + 1 })),
     toggleProjection: () =>

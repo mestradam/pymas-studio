@@ -1,7 +1,10 @@
+import { useMemo } from "react";
 import { Html } from "@react-three/drei";
 import type { PymasModel, SupportKind } from "../../types/pymas";
 import { nodePosition } from "../../engine/geometry";
 import { useThemeStore } from "../../store/useThemeStore";
+import { useModelStore } from "../../store/useModelStore";
+import { inverseUpAxisQuaternion } from "./threeUtils";
 
 interface NodeMarkersProps {
   model: PymasModel;
@@ -90,6 +93,10 @@ export default function NodeMarkers({
 }: NodeMarkersProps) {
   const theme = useThemeStore((state) => state.theme);
   const light = theme === "light";
+  const upAxis = useModelStore((state) => state.upAxis);
+  // Los glifos se modelan con la base hacia -Z de la vista: se contrarrota la
+  // rotación del modelo para que siempre apunten hacia abajo en pantalla.
+  const glyphRotation = useMemo(() => inverseUpAxisQuaternion(upAxis), [upAxis]);
   const nodeRadius = Math.max(diagonal * 0.0045, 1e-4);
   const supportSize = Math.max(diagonal * 0.018, nodeRadius * 2.6);
   const labelScale = Math.max(diagonal * 1.6, 1);
@@ -119,7 +126,11 @@ export default function NodeMarkers({
           const node = model.nodes[support.node];
           if (!node) return null;
           return (
-            <group key={`support-${support.id}`} position={nodePosition(node)}>
+            <group
+              key={`support-${support.id}`}
+              position={nodePosition(node)}
+              quaternion={glyphRotation}
+            >
               <SupportGlyph
                 kind={support.kind}
                 size={supportSize}

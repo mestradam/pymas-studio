@@ -8,7 +8,7 @@ import {
   type Vec3,
 } from "../../engine/geometry";
 import type { PatternResultData, PymasModel } from "../../types/pymas";
-import type { RenderMode } from "../../store/useModelStore";
+import { useModelStore, type RenderMode } from "../../store/useModelStore";
 import type { HeatmapMode } from "../../engine/heatmap";
 import { heatmapColor } from "../../engine/heatmap";
 import {
@@ -120,6 +120,7 @@ export default function FrameMesh({
   colorForFrame,
 }: FrameMeshProps) {
   const theme = useThemeStore((state) => state.theme);
+  const upAxis = useModelStore((state) => state.upAxis);
   const scalar = heatmapMode === "none" ? null : heatmapMode;
 
   const wire = useMemo(() => {
@@ -143,9 +144,9 @@ export default function FrameMesh({
 
   const heatRange = useMemo(() => {
     if (renderMode === "wire" || !result || !scalar) return null;
-    const range = deformationHeatRange(model, result, scalar);
+    const range = deformationHeatRange(model, result, scalar, upAxis);
     return range.max - range.min > 1e-15 ? range : null;
-  }, [model, result, scalar, renderMode]);
+  }, [model, result, scalar, renderMode, upAxis]);
 
   const extruded = useMemo(() => {
     if (renderMode === "wire") {
@@ -202,6 +203,7 @@ export default function FrameMesh({
         try {
           const curve = buildDeformedFrame(model, result, frameId, {
             subdivisions: 6,
+            upAxis,
           });
           stations = sanitizeStations(
             curve.stations,
@@ -338,6 +340,7 @@ export default function FrameMesh({
     sectionScale,
     diagonal,
     colorForFrame,
+    upAxis,
   ]);
 
   useEffect(

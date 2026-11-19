@@ -9,17 +9,22 @@ import {
   Table2,
 } from "lucide-react";
 import { useModelStore, type ViewPreset } from "../../store/useModelStore";
+import { nextUpAxis, viewPlaneLabel, type UpAxis } from "../../engine/upAxis";
 import { useThemeStore } from "../../store/useThemeStore";
 import { cn } from "../../lib/utils";
 import OpenFileButton from "./OpenFileButton";
 import ExportMenu from "./ExportMenu";
 
-const VIEWS: Array<{ id: ViewPreset; label: string; title: string }> = [
-  { id: "iso", label: "3D", title: "Vista isométrica" },
-  { id: "plan", label: "XY", title: "Planta (XY)" },
-  { id: "front", label: "XZ", title: "Elevación frontal (XZ)" },
-  { id: "side", label: "YZ", title: "Elevación lateral (YZ)" },
+const VIEWS: Array<{ id: ViewPreset; title: string }> = [
+  { id: "iso", title: "Vista isométrica" },
+  { id: "plan", title: "Planta" },
+  { id: "front", title: "Elevación frontal" },
+  { id: "side", title: "Elevación lateral" },
 ];
+
+function viewLabel(id: ViewPreset, upAxis: UpAxis): string {
+  return id === "iso" ? "3D" : viewPlaneLabel(id, upAxis);
+}
 
 interface TopToolbarProps {
   sidebarOpen: boolean;
@@ -39,6 +44,8 @@ export default function TopToolbar({
   const loadSample = useModelStore((state) => state.loadSample);
   const view = useModelStore((state) => state.view);
   const setView = useModelStore((state) => state.setView);
+  const upAxis = useModelStore((state) => state.upAxis);
+  const setUpAxis = useModelStore((state) => state.setUpAxis);
   const projection = useModelStore((state) => state.projection);
   const toggleProjection = useModelStore((state) => state.toggleProjection);
   const fitView = useModelStore((state) => state.fitView);
@@ -118,14 +125,32 @@ export default function TopToolbar({
                   ? "bg-white/10 text-white"
                   : "text-slate-400 hover:text-slate-200",
               )}
-              title={item.title}
+              title={
+                item.id === "iso"
+                  ? item.title
+                  : `${item.title} (${viewLabel(item.id, upAxis)})`
+              }
               onClick={() => setView(item.id)}
               disabled={!model}
             >
-              {item.label}
+              {viewLabel(item.id, upAxis)}
             </button>
           ))}
         </div>
+
+        <button
+          type="button"
+          className="btn h-8 min-w-[2.75rem] justify-center font-mono"
+          onClick={() => setUpAxis(nextUpAxis(upAxis))}
+          title={`Eje vertical: ${upAxis.toUpperCase()}. Clic para cambiar a ${nextUpAxis(
+            upAxis,
+          ).toUpperCase()}↑`}
+          aria-label={`Eje vertical ${upAxis.toUpperCase()}; cambiar a ${nextUpAxis(
+            upAxis,
+          ).toUpperCase()}`}
+        >
+          {upAxis.toUpperCase()}↑
+        </button>
 
         <button
           type="button"
