@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import { useModelStore } from "../../store/useModelStore";
+import { useThemeStore } from "../../store/useThemeStore";
 import type { PymasModel } from "../../types/pymas";
 import { framePositions, nodePosition, type Vec3 } from "../../engine/geometry";
 import { quaternionFromUnitVectors, Y_AXIS } from "./threeUtils";
@@ -22,6 +23,8 @@ export default function SelectionHighlight({
 }: SelectionHighlightProps) {
   const selectedFrameId = useModelStore((state) => state.selectedFrameId);
   const selectedNodeId = useModelStore((state) => state.selectedNodeId);
+  const theme = useThemeStore((state) => state.theme);
+  const light = theme === "light";
 
   const frame = selectedFrameId ? model.frames[selectedFrameId] : undefined;
   const node = selectedNodeId ? model.nodes[selectedNodeId] : undefined;
@@ -63,7 +66,7 @@ export default function SelectionHighlight({
               args={[frameRadius, frameRadius, frameGeometry.length, 16, 1, true]}
             />
             <meshBasicMaterial
-              color="#22d3ee"
+              color={light ? "#0e7490" : "#22d3ee"}
               transparent
               opacity={0.55}
               depthTest={false}
@@ -79,7 +82,7 @@ export default function SelectionHighlight({
             >
               <sphereGeometry args={[frameRadius * 1.9, 16, 12]} />
               <meshBasicMaterial
-                color="#67e8f9"
+                color={light ? "#0891b2" : "#67e8f9"}
                 transparent
                 opacity={0.85}
                 depthTest={false}
@@ -106,7 +109,7 @@ export default function SelectionHighlight({
           <mesh renderOrder={30}>
             <sphereGeometry args={[nodeRadius, 20, 14]} />
             <meshBasicMaterial
-              color="#f59e0b"
+              color={light ? "#b45309" : "#f59e0b"}
               transparent
               opacity={0.28}
               depthTest={false}
@@ -116,7 +119,7 @@ export default function SelectionHighlight({
           <mesh renderOrder={31}>
             <sphereGeometry args={[nodeRadius * 0.55, 18, 12]} />
             <meshBasicMaterial
-              color="#fbbf24"
+              color={light ? "#b45309" : "#fbbf24"}
               transparent
               opacity={0.95}
               depthTest={false}

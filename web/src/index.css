@@ -4,6 +4,154 @@
 
 :root {
   color-scheme: dark;
+
+  /* Superficies y texto */
+  --app-bg: #060a13;
+  --app-fg: #f1f5f9;
+  --scrollbar-thumb: #334155;
+  --scrollbar-thumb-hover: #475569;
+  --slider-track-end: #334155;
+  --slider-thumb-bg: #e2e8f0;
+  --slider-thumb-border: #0b1220;
+
+  /* Etiquetas flotantes sobre la escena 3D */
+  --label-bg: rgba(2, 6, 23, 0.82);
+  --label-positive: #a5f3fc;
+  --label-negative: #fecdd3;
+  --label-positive-border: rgba(34, 211, 238, 0.45);
+  --label-negative-border: rgba(251, 113, 133, 0.45);
+
+  /* Gráficos 2D del inspector */
+  --chart-fx: #38bdf8;
+  --chart-fy: #34d399;
+  --chart-fz: #fbbf24;
+  --chart-mx: #c084fc;
+  --chart-my: #fb7185;
+  --chart-mz: #f97316;
+  --chart-deflection: #22d3ee;
+  --chart-zero: #334155;
+  --chart-grid: #1e293b;
+  --chart-cursor: #f8fafc;
+  --chart-dot-stroke: #0f172a;
+  --chart-dot-fill: #fb923c;
+
+  /* Escala neutra usada por las utilidades de Tailwind */
+  --c-white: 255 255 255;
+  --c-slate-50: 248 250 252;
+  --c-slate-100: 241 245 249;
+  --c-slate-200: 226 232 240;
+  --c-slate-300: 203 213 225;
+  --c-slate-400: 148 163 184;
+  --c-slate-500: 100 116 139;
+  --c-slate-600: 71 85 105;
+  --c-slate-700: 51 65 85;
+  --c-slate-800: 30 41 59;
+  --c-slate-900: 15 23 42;
+  --c-slate-950: 2 6 23;
+
+  /* Acentos: se oscurecen en tema claro para conservar el contraste */
+  --c-sky-100: 224 242 254;
+  --c-sky-200: 186 230 253;
+  --c-sky-300: 125 211 252;
+  --c-sky-400: 56 189 248;
+  --c-sky-500: 14 165 233;
+  --c-sky-950: 8 47 73;
+  --c-emerald-200: 167 243 208;
+  --c-emerald-300: 110 231 183;
+  --c-emerald-400: 52 211 153;
+  --c-emerald-500: 16 185 129;
+  --c-amber-100: 254 243 199;
+  --c-amber-200: 253 230 138;
+  --c-amber-300: 252 211 77;
+  --c-amber-400: 251 191 36;
+  --c-rose-100: 255 228 230;
+  --c-rose-200: 254 205 211;
+  --c-rose-300: 253 164 175;
+  --c-rose-400: 251 113 133;
+  --c-rose-500: 244 63 94;
+  --c-rose-950: 76 5 25;
+  --c-cyan-200: 165 243 252;
+  --c-cyan-300: 103 232 249;
+  --c-cyan-400: 34 211 238;
+  --c-orange-200: 254 215 170;
+  --c-orange-300: 253 186 116;
+
+  --c-panel: 17 24 39;
+  --c-panel-soft: 23 32 51;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --app-bg: #f8fafc;
+  --app-fg: #0f172a;
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-thumb-hover: #94a3b8;
+  --slider-track-end: #cbd5e1;
+  --slider-thumb-bg: #0f172a;
+  --slider-thumb-border: #ffffff;
+
+  --label-bg: rgba(255, 255, 255, 0.92);
+  --label-positive: #0e7490;
+  --label-negative: #be123c;
+  --label-positive-border: rgba(14, 116, 144, 0.45);
+  --label-negative-border: rgba(190, 18, 60, 0.45);
+
+  /* Trazos más densos sobre fondo claro para conservar el contraste. */
+  --chart-fx: #0369a1;
+  --chart-fy: #047857;
+  --chart-fz: #b45309;
+  --chart-mx: #7e22ce;
+  --chart-my: #be123c;
+  --chart-mz: #c2410c;
+  --chart-deflection: #0e7490;
+  --chart-zero: #94a3b8;
+  --chart-grid: #dbe3ec;
+  --chart-cursor: #0f172a;
+  --chart-dot-stroke: #ffffff;
+  --chart-dot-fill: #ea580c;
+
+  --c-white: 15 23 42;
+  --c-slate-50: 2 6 23;
+  --c-slate-100: 15 23 42;
+  --c-slate-200: 30 41 59;
+  --c-slate-300: 51 65 85;
+  --c-slate-400: 71 85 105;
+  --c-slate-500: 100 116 139;
+  --c-slate-600: 100 116 139;
+  --c-slate-700: 148 163 184;
+  --c-slate-800: 203 213 225;
+  --c-slate-900: 241 245 249;
+  --c-slate-950: 248 250 252;
+
+  --c-sky-100: 3 105 161;
+  --c-sky-200: 3 105 161;
+  --c-sky-300: 3 105 161;
+  --c-sky-400: 2 132 199;
+  --c-sky-500: 14 165 233;
+  --c-sky-950: 224 242 254;
+  --c-emerald-200: 4 120 87;
+  --c-emerald-300: 4 120 87;
+  --c-emerald-400: 5 150 105;
+  --c-emerald-500: 16 185 129;
+  --c-amber-100: 146 64 14;
+  --c-amber-200: 146 64 14;
+  --c-amber-300: 180 83 9;
+  --c-amber-400: 217 119 6;
+  --c-rose-100: 159 18 57;
+  --c-rose-200: 190 18 60;
+  --c-rose-300: 190 18 60;
+  --c-rose-400: 225 29 72;
+  --c-rose-500: 244 63 94;
+  --c-rose-950: 255 241 242;
+  --c-cyan-200: 14 116 144;
+  --c-cyan-300: 14 116 144;
+  --c-cyan-400: 8 145 178;
+  --c-orange-200: 194 65 12;
+  --c-orange-300: 234 88 12;
+
+  --c-panel: 255 255 255;
+  --c-panel-soft: 248 250 252;
 }
 
 html,
@@ -15,14 +163,15 @@ body,
 body {
   margin: 0;
   overflow: hidden;
-  background: #060a13;
+  background: var(--app-bg);
+  color: var(--app-fg);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #334155 transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -35,12 +184,12 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: var(--scrollbar-thumb);
   border-radius: 9999px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: var(--scrollbar-thumb-hover);
 }
 
 canvas {
@@ -106,13 +255,13 @@ input[type="range"] {
 input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 9999px;
-  background: linear-gradient(90deg, #0ea5e9, #334155);
+  background: linear-gradient(90deg, #0ea5e9, var(--slider-track-end));
 }
 
 input[type="range"]::-moz-range-track {
   height: 4px;
   border-radius: 9999px;
-  background: linear-gradient(90deg, #0ea5e9, #334155);
+  background: linear-gradient(90deg, #0ea5e9, var(--slider-track-end));
 }
 
 input[type="range"]::-webkit-slider-thumb {
@@ -122,8 +271,8 @@ input[type="range"]::-webkit-slider-thumb {
   height: 14px;
   width: 14px;
   border-radius: 9999px;
-  border: 2px solid #0b1220;
-  background: #e2e8f0;
+  border: 2px solid var(--slider-thumb-border);
+  background: var(--slider-thumb-bg);
   box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.6);
 }
 
@@ -131,11 +280,11 @@ input[type="range"]::-moz-range-thumb {
   height: 12px;
   width: 12px;
   border-radius: 9999px;
-  border: 2px solid #0b1220;
-  background: #e2e8f0;
+  border: 2px solid var(--slider-thumb-border);
+  background: var(--slider-thumb-bg);
   box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.6);
 }
 
 select {
-  color-scheme: dark;
+  color-scheme: inherit;
 }

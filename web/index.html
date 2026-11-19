@@ -7,6 +7,26 @@
       name="description"
       content="PyMAS Studio 3D — visor web estático de modelos estructurales PyMAS"
     />
+    <script>
+      // Aplica el tema antes del primer render para evitar un destello oscuro.
+      (function () {
+        try {
+          var stored = localStorage.getItem("pymas-studio-theme");
+          var theme =
+            stored === "light" || stored === "dark"
+              ? stored
+              : window.matchMedia("(prefers-color-scheme: light)").matches
+                ? "light"
+                : "dark";
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.classList.toggle("dark", theme === "dark");
+          document.documentElement.style.colorScheme = theme;
+        } catch (_) {
+          document.documentElement.dataset.theme = "dark";
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
     <title>PyMAS Studio 3D</title>
   </head>
   <body class="h-full bg-slate-950 text-slate-100">

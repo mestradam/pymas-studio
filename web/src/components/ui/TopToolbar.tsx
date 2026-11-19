@@ -3,10 +3,13 @@ import {
   GitCompareArrows,
   Loader2,
   Maximize2,
+  Moon,
   SlidersHorizontal,
+  Sun,
   Table2,
 } from "lucide-react";
 import { useModelStore, type ViewPreset } from "../../store/useModelStore";
+import { useThemeStore } from "../../store/useThemeStore";
 import { cn } from "../../lib/utils";
 import OpenFileButton from "./OpenFileButton";
 import ExportMenu from "./ExportMenu";
@@ -45,6 +48,8 @@ export default function TopToolbar({
   const comparePanelOpen = useModelStore((state) => state.comparePanelOpen);
   const setComparePanelOpen = useModelStore((state) => state.setComparePanelOpen);
   const setCompareEnabled = useModelStore((state) => state.setCompareEnabled);
+  const theme = useThemeStore((state) => state.theme);
+  const setTheme = useThemeStore((state) => state.setTheme);
 
   return (
     <header className="relative z-30 flex h-14 shrink-0 items-center gap-2 border-b border-white/10 bg-slate-950/80 px-3 backdrop-blur-md">
@@ -130,6 +135,43 @@ export default function TopToolbar({
         >
           {projection === "perspective" ? "Persp." : "Orto."}
         </button>
+
+        <div
+          className="flex h-8 items-center rounded-lg border border-white/10 bg-slate-950/60 p-0.5"
+          role="group"
+          aria-label="Tema de la interfaz"
+        >
+          <button
+            type="button"
+            className={cn(
+              "inline-flex items-center gap-1 rounded-[7px] px-1.5 py-1 text-[10px] font-medium transition",
+              theme === "light"
+                ? "bg-white/10 text-white shadow-sm"
+                : "text-slate-400 hover:text-slate-200",
+            )}
+            onClick={() => setTheme("light")}
+            title="Tema claro"
+            aria-pressed={theme === "light"}
+          >
+            <Sun size={13} />
+            <span className="hidden xl:inline">Claro</span>
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "inline-flex items-center gap-1 rounded-[7px] px-1.5 py-1 text-[10px] font-medium transition",
+              theme === "dark"
+                ? "bg-white/10 text-white shadow-sm"
+                : "text-slate-400 hover:text-slate-200",
+            )}
+            onClick={() => setTheme("dark")}
+            title="Tema oscuro"
+            aria-pressed={theme === "dark"}
+          >
+            <Moon size={13} />
+            <span className="hidden xl:inline">Oscuro</span>
+          </button>
+        </div>
 
         <button
           type="button"

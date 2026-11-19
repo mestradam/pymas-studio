@@ -1,6 +1,7 @@
 import { Html } from "@react-three/drei";
 import type { PymasModel, SupportKind } from "../../types/pymas";
 import { nodePosition } from "../../engine/geometry";
+import { useThemeStore } from "../../store/useThemeStore";
 
 interface NodeMarkersProps {
   model: PymasModel;
@@ -18,14 +19,24 @@ const SUPPORT_COLORS: Record<SupportKind, string> = {
   free: "#64748b",
 };
 
+const SUPPORT_COLORS_LIGHT: Record<SupportKind, string> = {
+  fixed: "#c2410c",
+  pinned: "#b45309",
+  roller: "#a16207",
+  rotational: "#6d28d9",
+  free: "#475569",
+};
+
 function SupportGlyph({
   kind,
   size,
+  light,
 }: {
   kind: SupportKind;
   size: number;
+  light: boolean;
 }) {
-  const color = SUPPORT_COLORS[kind];
+  const color = (light ? SUPPORT_COLORS_LIGHT : SUPPORT_COLORS)[kind];
   const material = (
     <meshStandardMaterial
       color={color}
@@ -77,6 +88,8 @@ export default function NodeMarkers({
   showLabels,
   diagonal,
 }: NodeMarkersProps) {
+  const theme = useThemeStore((state) => state.theme);
+  const light = theme === "light";
   const nodeRadius = Math.max(diagonal * 0.0045, 1e-4);
   const supportSize = Math.max(diagonal * 0.018, nodeRadius * 2.6);
   const labelScale = Math.max(diagonal * 1.6, 1);
@@ -92,8 +105,8 @@ export default function NodeMarkers({
           <mesh key={`node-${node.id}`} position={nodePosition(node)}>
             <sphereGeometry args={[nodeRadius, 14, 10]} />
             <meshStandardMaterial
-              color="#e2e8f0"
-              emissive="#94a3b8"
+              color={light ? "#475569" : "#e2e8f0"}
+              emissive={light ? "#64748b" : "#94a3b8"}
               emissiveIntensity={0.25}
               roughness={0.35}
               metalness={0.3}
@@ -107,7 +120,11 @@ export default function NodeMarkers({
           if (!node) return null;
           return (
             <group key={`support-${support.id}`} position={nodePosition(node)}>
-              <SupportGlyph kind={support.kind} size={supportSize} />
+              <SupportGlyph
+                kind={support.kind}
+                size={supportSize}
+                light={light}
+              />
             </group>
           );
         })}

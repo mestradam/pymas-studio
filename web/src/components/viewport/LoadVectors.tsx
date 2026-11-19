@@ -1,12 +1,16 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import type { PymasModel } from "../../types/pymas";
+import type { LoadArrowMode } from "../../store/useModelStore";
+import { useThemeStore } from "../../store/useThemeStore";
 import {
   distributedLoadMagnitude,
   framePositions,
   nodePosition,
   pointAtStation,
   projectLoadToGlobal,
+  scale,
+  sub,
   type Vec3,
 } from "../../engine/geometry";
 import {
@@ -20,6 +24,7 @@ interface LoadVectorsProps {
   patternId: string | null;
   loadScale: number;
   diagonal: number;
+  arrowMode: LoadArrowMode;
 }
 
 interface ArrowSpec {
@@ -30,6 +35,12 @@ interface ArrowSpec {
   color: string;
 }
 
+interface EnvelopeSpec {
+  key: string;
+  points: Vec3[];
+  color: string;
+}
+
 interface MomentSpec {
   key: string;
   origin: Vec3;
@@ -37,10 +48,18 @@ interface MomentSpec {
   radius: number;
 }
 
-const NODAL_COLOR = "#f87171";
-const DISTRIBUTED_COLOR = "#fbbf24";
-const MOMENT_COLOR = "#c084fc";
-const STATIONS = [0.1, 0.5, 0.9];
+const DARK_PALETTE = {
+  nodal: "#f87171",
+  distributed: "#fbbf24",
+  moment: "#c084fc",
+} as const;
+const LIGHT_PALETTE = {
+  nodal: "#dc2626",
+  distributed: "#b45309",
+  moment: "#7c3aed",
+} as const;
+/** Estaciones donde se dibujan las flechas de una carga distribuida. */
+const STATIONS = [0.06, 0.28, 0.5, 0.72, 0.94];
 
 function unit(v: Vec3): Vec3 | null {
   const n = Math.hypot(v[0], v[1], v[2]);
@@ -48,51 +67,67 @@ function unit(v: Vec3): Vec3 | null {
   return [v[0] / n, v[1] / n, v[2] / n];
 }
 
+/**
+ * Flecha técnica: astil muy fino y cono alargado. En modo `tip` la punta toca
+ * el elemento cargado y el cuerpo queda por fuera; en modo `origin` la cola
+ * nace en el elemento y la flecha apunta hacia afuera.
+ */
 function Arrow({
   origin,
   direction,
   length,
   color,
   diagonal,
+  mode,
 }: {
   origin: Vec3;
   direction: Vec3;
   length: number;
   color: string;
   diagonal: number;
+  mode: LoadArrowMode;
 }) {
   const quaternion = useMemo(
     () => quaternionFromUnitVectors(Y_AXIS, new THREE.Vector3(...direction)),
     [direction],
   );
-  const thickness = Math.min(
-    diagonal * 0.0045,
-    Math.max(length * 0.11, diagonal * 0.0016),
+
+  const radius = Math.max(
+    Math.min(diagonal * 0.0013, length * 0.032),
+    diagonal * 0.0005,
   );
-  const headLength = Math.min(length * 0.38, thickness * 7);
-  const shaftLength = Math.max(length - headLength, length * 0.2);
+  const headLength = Math.min(length * 0.3, radius * 9);
+  const shaftLength = Math.max(length - headLength, length * 0.15);
+  const headRadius = radius * 3.2;
+  const start = useMemo(
+    () =>
+      mode === "tip"
+        ? sub(origin, scale(direction, length))
+        : ([...origin] as Vec3),
+    [mode, origin, direction, length],
+  );
+
+  const material = (
+    <meshStandardMaterial
+      color={color}
+      emissive={color}
+      emissiveIntensity={0.24}
+      roughness={0.5}
+      metalness={0.1}
+      toneMapped={false}
+      depthWrite={false}
+    />
+  );
 
   return (
-    <group position={origin} quaternion={quaternion} renderOrder={5}>
+    <group position={start} quaternion={quaternion} renderOrder={5}>
       <mesh position={[0, shaftLength / 2, 0]}>
-        <cylinderGeometry args={[thickness, thickness, shaftLength, 8]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={color}
-          emissiveIntensity={0.22}
-          roughness={0.5}
-          depthWrite={false}
-        />
+        <cylinderGeometry args={[radius, radius, shaftLength, 10]} />
+        {material}
       </mesh>
       <mesh position={[0, shaftLength + headLength / 2, 0]}>
-        <coneGeometry args={[thickness * 2.6, headLength, 10]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={color}
-          emissiveIntensity={0.22}
-          roughness={0.5}
-          depthWrite={false}
-        />
+        <coneGeometry args={[headRadius, headLength, 12]} />
+        {material}
       </mesh>
     </group>
   );
@@ -103,18 +138,27 @@ export default function LoadVectors({
   patternId,
   loadScale,
   diagonal,
+  arrowMode,
 }: LoadVectorsProps) {
+  const theme = useThemeStore((state) => state.theme);
+  const palette = theme === "light" ? LIGHT_PALETTE : DARK_PALETTE;
+
   const data = useMemo(() => {
     const pattern = patternId ? model.loadPatterns[patternId] : undefined;
     if (!pattern) {
       return {
         arrows: [] as ArrowSpec[],
         moments: [] as MomentSpec[],
+        envelopes: [] as EnvelopeSpec[],
       };
     }
 
     const nodal: Array<{ origin: Vec3; force: Vec3; moment: Vec3 }> = [];
-    const distributed: Array<{ origin: Vec3; force: Vec3 }> = [];
+    const distributedGroups: Array<{
+      key: string;
+      points: Vec3[];
+      force: Vec3;
+    }> = [];
 
     for (const [nodeId, load] of Object.entries(pattern.nodalLoads)) {
       const node = model.nodes[nodeId];
@@ -130,24 +174,23 @@ export default function LoadVectors({
       const frame = model.frames[frameId];
       if (!frame) continue;
       const { p1, p2 } = framePositions(frame, model.nodes);
-      for (const load of loads) {
+      loads.forEach((load, loadIndex) => {
         const force = projectLoadToGlobal(load, frame.localAxes);
         const magnitude = distributedLoadMagnitude(load);
-        if (magnitude < 1e-12) continue;
-        for (const station of STATIONS) {
-          distributed.push({
-            origin: pointAtStation(p1, p2, station),
-            force,
-          });
-        }
-      }
+        if (magnitude < 1e-12) return;
+        distributedGroups.push({
+          key: `distributed-${frameId}-${loadIndex}`,
+          points: STATIONS.map((station) => pointAtStation(p1, p2, station)),
+          force,
+        });
+      });
     }
 
     const nodalMax = nodal.reduce(
       (max, entry) => Math.max(max, Math.hypot(...entry.force)),
       0,
     );
-    const distributedMax = distributed.reduce(
+    const distributedMax = distributedGroups.reduce(
       (max, entry) => Math.max(max, Math.hypot(...entry.force)),
       0,
     );
@@ -166,6 +209,7 @@ export default function LoadVectors({
       ) * loadScale;
     const arrows: ArrowSpec[] = [];
     const moments: MomentSpec[] = [];
+    const envelopes: EnvelopeSpec[] = [];
 
     nodal.forEach((entry, index) => {
       const magnitude = Math.hypot(...entry.force);
@@ -179,7 +223,7 @@ export default function LoadVectors({
             (magnitude / Math.max(nodalMax, 1e-12)) * targetLength,
             diagonal * 0.008,
           ),
-          color: NODAL_COLOR,
+          color: palette.nodal,
         });
       }
       const momentMagnitude = Math.hypot(...entry.moment);
@@ -194,29 +238,77 @@ export default function LoadVectors({
       }
     });
 
-    distributed.forEach((entry, index) => {
-      const magnitude = Math.hypot(...entry.force);
-      const direction = unit(entry.force);
+    distributedGroups.forEach((group) => {
+      const magnitude = Math.hypot(...group.force);
+      const direction = unit(group.force);
       if (!direction || magnitude < 1e-12) return;
-      arrows.push({
-        key: `distributed-${index}`,
-        origin: entry.origin,
-        direction,
-        length: Math.max(
-          (magnitude / Math.max(distributedMax, 1e-12)) * targetLength,
-          diagonal * 0.008,
-        ),
-        color: DISTRIBUTED_COLOR,
+      const length = Math.max(
+        (magnitude / Math.max(distributedMax, 1e-12)) * targetLength,
+        diagonal * 0.008,
+      );
+
+      group.points.forEach((point, index) => {
+        arrows.push({
+          key: `${group.key}-${index}`,
+          origin: point,
+          direction,
+          length,
+          color: palette.distributed,
+        });
       });
+
+      // Envolvente de carga: une los extremos posteriores (las colas) de las
+      // flechas. Sólo tiene sentido cuando las puntas tocan el elemento.
+      if (arrowMode === "tip") {
+        envelopes.push({
+          key: `${group.key}-envelope`,
+          points: group.points.map((point) =>
+            sub(point, scale(direction, length)),
+          ),
+          color: palette.distributed,
+        });
+      }
     });
 
-    return { arrows, moments };
-  }, [model, patternId, loadScale, diagonal]);
+    return { arrows, moments, envelopes };
+  }, [model, patternId, loadScale, diagonal, arrowMode, palette]);
 
-  if (data.arrows.length === 0 && data.moments.length === 0) return null;
+  if (
+    data.arrows.length === 0 &&
+    data.moments.length === 0 &&
+    data.envelopes.length === 0
+  ) {
+    return null;
+  }
 
   return (
     <group>
+      {data.envelopes.map((envelope) => {
+        const coordinates: number[] = [];
+        for (let index = 0; index < envelope.points.length - 1; index += 1) {
+          const current = envelope.points[index];
+          const next = envelope.points[index + 1];
+          if (current && next) coordinates.push(...current, ...next);
+        }
+        const positions = new Float32Array(coordinates);
+        return (
+          <lineSegments key={envelope.key} renderOrder={4}>
+            <bufferGeometry>
+              <bufferAttribute
+                attach="attributes-position"
+                args={[positions, 3]}
+              />
+            </bufferGeometry>
+            <lineBasicMaterial
+              color={envelope.color}
+              transparent
+              opacity={0.72}
+              depthWrite={false}
+              toneMapped={false}
+            />
+          </lineSegments>
+        );
+      })}
       {data.arrows.map((arrow) => (
         <Arrow
           key={arrow.key}
@@ -225,6 +317,7 @@ export default function LoadVectors({
           length={arrow.length}
           color={arrow.color}
           diagonal={diagonal}
+          mode={arrowMode}
         />
       ))}
       {data.moments.map((moment) => (
@@ -235,11 +328,11 @@ export default function LoadVectors({
           renderOrder={5}
         >
           <torusGeometry
-            args={[moment.radius, moment.radius * 0.22, 8, 28]}
+            args={[moment.radius, moment.radius * 0.24, 8, 28]}
           />
           <meshStandardMaterial
-            color={MOMENT_COLOR}
-            emissive={MOMENT_COLOR}
+            color={palette.moment}
+            emissive={palette.moment}
             emissiveIntensity={0.35}
             roughness={0.45}
           />

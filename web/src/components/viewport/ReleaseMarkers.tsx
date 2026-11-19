@@ -6,6 +6,7 @@ import {
   type Vec3,
 } from "../../engine/geometry";
 import { quaternionForAxis } from "./threeUtils";
+import { useThemeStore } from "../../store/useThemeStore";
 
 interface ReleaseMarkersProps {
   model: PymasModel;
@@ -44,6 +45,8 @@ export default function ReleaseMarkers({
   sectionScale,
   diagonal,
 }: ReleaseMarkersProps) {
+  const theme = useThemeStore((state) => state.theme);
+  const light = theme === "light";
   if (!showReleases) return null;
 
   const ends: ReleaseEnd[] = [];
@@ -99,7 +102,7 @@ export default function ReleaseMarkers({
           end.point[2] + end.inward[2] * offset,
         ];
         const rotationAxes = ROTATION_AXES.filter((axis) => end.flags[axis]);
-        const materialColor = "#fde047";
+        const materialColor = light ? "#a16207" : "#fde047";
 
         return (
           <group key={end.key} position={position}>
@@ -138,8 +141,8 @@ export default function ReleaseMarkers({
               >
                 <octahedronGeometry args={[end.radius * 0.9, 0]} />
                 <meshStandardMaterial
-                  color="#fca5a5"
-                  emissive="#f87171"
+                  color={light ? "#dc2626" : "#fca5a5"}
+                  emissive={light ? "#b91c1c" : "#f87171"}
                   emissiveIntensity={0.35}
                   roughness={0.35}
                 />

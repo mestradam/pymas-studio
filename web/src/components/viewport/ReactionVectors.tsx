@@ -3,6 +3,7 @@ import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import type { PatternResultData, PymasModel } from "../../types/pymas";
 import { formatNumber, nodePosition, type Vec3 } from "../../engine/geometry";
+import { useThemeStore } from "../../store/useThemeStore";
 import {
   quaternionForAxis,
   quaternionFromUnitVectors,
@@ -34,6 +35,8 @@ interface ReactionMoment {
 
 const FORCE_COLOR = "#34d399";
 const MOMENT_COLOR = "#c4b5fd";
+const FORCE_COLOR_LIGHT = "#047857";
+const MOMENT_COLOR_LIGHT = "#6d28d9";
 
 function unit(v: Vec3): Vec3 | null {
   const norm = Math.hypot(v[0], v[1], v[2]);
@@ -46,11 +49,13 @@ function Arrow({
   direction,
   length,
   diagonal,
+  color,
 }: {
   origin: Vec3;
   direction: Vec3;
   length: number;
   diagonal: number;
+  color: string;
 }) {
   const quaternion = useMemo(
     () => quaternionFromUnitVectors(Y_AXIS, new THREE.Vector3(...direction)),
@@ -68,8 +73,8 @@ function Arrow({
       <mesh position={[0, shaftLength / 2, 0]}>
         <cylinderGeometry args={[thickness, thickness, shaftLength, 8]} />
         <meshStandardMaterial
-          color={FORCE_COLOR}
-          emissive={FORCE_COLOR}
+          color={color}
+          emissive={color}
           emissiveIntensity={0.38}
           roughness={0.45}
           depthWrite={false}
@@ -78,8 +83,8 @@ function Arrow({
       <mesh position={[0, shaftLength + headLength / 2, 0]}>
         <coneGeometry args={[thickness * 2.6, headLength, 10]} />
         <meshStandardMaterial
-          color={FORCE_COLOR}
-          emissive={FORCE_COLOR}
+          color={color}
+          emissive={color}
           emissiveIntensity={0.38}
           roughness={0.45}
           depthWrite={false}
@@ -99,6 +104,11 @@ export default function ReactionVectors({
   result,
   diagonal,
 }: ReactionVectorsProps) {
+  const theme = useThemeStore((state) => state.theme);
+  const light = theme === "light";
+  const forceColor = light ? FORCE_COLOR_LIGHT : FORCE_COLOR;
+  const momentColor = light ? MOMENT_COLOR_LIGHT : MOMENT_COLOR;
+
   const data = useMemo(() => {
     const entries: Array<{
       key: string;
@@ -203,6 +213,7 @@ export default function ReactionVectors({
             direction={arrow.direction}
             length={arrow.length}
             diagonal={diagonal}
+            color={forceColor}
           />
           {arrow.showLabel && (
             <Html
@@ -227,8 +238,8 @@ export default function ReactionVectors({
         >
           <torusGeometry args={[moment.radius, moment.radius * 0.2, 8, 26]} />
           <meshStandardMaterial
-            color={MOMENT_COLOR}
-            emissive={MOMENT_COLOR}
+            color={momentColor}
+            emissive={momentColor}
             emissiveIntensity={0.4}
             roughness={0.45}
             depthWrite={false}
