@@ -10,6 +10,7 @@ import {
 import { heatmapColor } from "../../engine/heatmap";
 import { framePositions } from "../../engine/geometry";
 import { useModelStore } from "../../store/useModelStore";
+import { useThemeStore } from "../../store/useThemeStore";
 
 interface DeformedStructureProps {
   model: PymasModel;
@@ -18,6 +19,7 @@ interface DeformedStructureProps {
 }
 
 const FALLBACK_COLOR: [number, number, number] = [0.25, 0.76, 0.98];
+const FALLBACK_COLOR_LIGHT: [number, number, number] = [0.05, 0.42, 0.55];
 
 /**
  * Curva deformada de cada barra (Hermite sobre `internal_displacements`).
@@ -35,6 +37,8 @@ export default function DeformedStructure({
   const showGhost = useModelStore((state) => state.showGhost);
   const animate = useModelStore((state) => state.animateDeformation);
   const heatmapMode = useModelStore((state) => state.heatmapMode);
+  const theme = useThemeStore((state) => state.theme);
+  const light = theme === "light";
   const animateRef = useRef(animate);
   animateRef.current = animate;
 
@@ -67,7 +71,7 @@ export default function DeformedStructure({
           base.push(point[0], point[1], point[2]);
           displacement.push(offset[0], offset[1], offset[2]);
 
-          let color = FALLBACK_COLOR;
+          let color = light ? FALLBACK_COLOR_LIGHT : FALLBACK_COLOR;
           if (hasRange) {
             const value = curve.heat[heatmapMode][vertex] ?? 0;
             color = heatmapColor(value, data.range.min, data.range.max);
@@ -108,7 +112,7 @@ export default function DeformedStructure({
       geometry,
       material,
     };
-  }, [data, heatmapMode]);
+  }, [data, heatmapMode, light]);
 
   const ghost = useMemo(() => {
     const positions: number[] = [];
@@ -124,9 +128,9 @@ export default function DeformedStructure({
       new THREE.Float32BufferAttribute(new Float32Array(positions), 3),
     );
     const material = new THREE.LineDashedMaterial({
-      color: "#94a3b8",
+      color: light ? "#64748b" : "#94a3b8",
       transparent: true,
-      opacity: 0.34,
+      opacity: light ? 0.48 : 0.34,
       dashSize: Math.max(diagonal * 0.016, 1e-5),
       gapSize: Math.max(diagonal * 0.011, 1e-5),
       toneMapped: false,
@@ -135,7 +139,7 @@ export default function DeformedStructure({
     lines.computeLineDistances();
     lines.renderOrder = 2;
     return { lines, geometry, material };
-  }, [model, diagonal]);
+  }, [model, diagonal, light]);
 
   useEffect(
     () => () => {

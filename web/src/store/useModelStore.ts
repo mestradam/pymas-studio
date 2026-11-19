@@ -18,6 +18,13 @@ import {
 import { compareModels, type ModelComparison } from "../engine/comparison";
 
 export type RenderMode = "wire" | "extruded";
+
+/**
+ * Posición de los vectores de carga respecto del elemento cargado:
+ *  - `tip`: la punta toca el nudo/eje (convención estructural).
+ *  - `origin`: la cola nace en el elemento y la flecha apunta hacia afuera.
+ */
+export type LoadArrowMode = "tip" | "origin";
 export type ViewPreset = "iso" | "plan" | "front" | "side";
 export type ProjectionMode = "perspective" | "orthographic";
 export type ResultMode = "pattern" | "combination" | "env_max" | "env_min";
@@ -233,6 +240,7 @@ export interface ModelState {
   opacity: number;
   sectionScale: number;
   loadScale: number;
+  loadArrowMode: LoadArrowMode;
 
   showNodes: boolean;
   showLabels: boolean;
@@ -297,6 +305,7 @@ export interface ModelActions {
   setOpacity: (value: number) => void;
   setSectionScale: (value: number) => void;
   setLoadScale: (value: number) => void;
+  setLoadArrowMode: (mode: LoadArrowMode) => void;
   setShowNodes: (value: boolean) => void;
   setShowLabels: (value: boolean) => void;
   setShowSupports: (value: boolean) => void;
@@ -365,6 +374,7 @@ const INITIAL_STATE: ModelState = {
   opacity: 0.94,
   sectionScale: 1,
   loadScale: 1,
+  loadArrowMode: "tip",
 
   showNodes: true,
   showLabels: false,
@@ -826,6 +836,7 @@ export const useModelStore = create<ModelStore>((set) => {
     setSectionScale: (sectionScale) =>
       set({ sectionScale: Math.min(8, Math.max(0.25, sectionScale)) }),
     setLoadScale: (loadScale) => set({ loadScale: Math.min(5, Math.max(0.25, loadScale)) }),
+    setLoadArrowMode: (loadArrowMode) => set({ loadArrowMode }),
     setShowNodes: (showNodes) => set({ showNodes }),
     setShowLabels: (showLabels) => set({ showLabels }),
     setShowSupports: (showSupports) => set({ showSupports }),

@@ -119,6 +119,7 @@ export default function ControlSidebar({
   const opacity = useModelStore((state) => state.opacity);
   const sectionScale = useModelStore((state) => state.sectionScale);
   const loadScale = useModelStore((state) => state.loadScale);
+  const loadArrowMode = useModelStore((state) => state.loadArrowMode);
   const showNodes = useModelStore((state) => state.showNodes);
   const showLabels = useModelStore((state) => state.showLabels);
   const showSupports = useModelStore((state) => state.showSupports);
@@ -145,6 +146,7 @@ export default function ControlSidebar({
   const setOpacity = useModelStore((state) => state.setOpacity);
   const setSectionScale = useModelStore((state) => state.setSectionScale);
   const setLoadScale = useModelStore((state) => state.setLoadScale);
+  const setLoadArrowMode = useModelStore((state) => state.setLoadArrowMode);
   const setShowNodes = useModelStore((state) => state.setShowNodes);
   const setShowLabels = useModelStore((state) => state.setShowLabels);
   const setShowSupports = useModelStore((state) => state.setShowSupports);
@@ -657,6 +659,36 @@ export default function ControlSidebar({
                     El modelo no define patrones de carga.
                   </div>
                 )}
+              </div>
+              <div className="mt-2">
+                <h3 className="panel-title mb-1.5">Dirección de flechas</h3>
+                <div className="space-y-1">
+                  {(
+                    [
+                      ["tip", "Punta en el elemento", "hacia adentro"],
+                      ["origin", "Origen en el elemento", "hacia afuera"],
+                    ] as const
+                  ).map(([id, label, hint]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={cn(
+                        "flex w-full items-center justify-between gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] transition",
+                        loadArrowMode === id
+                          ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
+                          : "border-white/[0.06] bg-white/[0.02] text-slate-300 hover:bg-white/[0.05]",
+                      )}
+                      onClick={() => setLoadArrowMode(id)}
+                      title={`${label} (${hint})`}
+                      disabled={!showLoads}
+                    >
+                      <span className="truncate">{label}</span>
+                      <span className="shrink-0 text-[9px] uppercase tracking-wide text-slate-500">
+                        {hint}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </section>
 

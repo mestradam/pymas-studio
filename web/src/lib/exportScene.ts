@@ -180,9 +180,10 @@ function drawHeatLegend(
   const width = 220;
   const height = 12;
   const gradient = context.createLinearGradient(x, 0, x + width, 0);
-  gradient.addColorStop(0, "#22c55e");
-  gradient.addColorStop(0.5, "#64748b");
-  gradient.addColorStop(1, "#ef4444");
+  // Sobre blanco la leyenda usa tonos más profundos para conservar contraste.
+  gradient.addColorStop(0, light ? "#15803d" : "#22c55e");
+  gradient.addColorStop(0.5, light ? "#475569" : "#64748b");
+  gradient.addColorStop(1, light ? "#b91c1c" : "#ef4444");
   context.fillStyle = gradient;
   context.beginPath();
   context.roundRect(x, y, width, height, 4);
