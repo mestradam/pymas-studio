@@ -10,6 +10,7 @@ import {
 } from "./geometry";
 import type { HeatmapScalar } from "./heatmap";
 import { heatmapRange } from "./heatmap";
+import { DEFAULT_UP_AXIS, horizontalAxisIndices, upAxisIndex, type UpAxis } from "./upAxis";
 
 /**
  * Deformada elástica a partir de `internal_displacements`.
@@ -32,6 +33,42 @@ export interface DeformationOptions {
   scale?: number;
   /** Subdivisiones por tramo entre estaciones (mínimo 2 para ver curvatura). */
   subdivisions?: number;
+  /** Eje vertical del modelo; define qué barras son columnas para la deriva. */
+  upAxis?: UpAxis;
+}
+
+/** Fracción mínima de la longitud que debe ser vertical para contar como columna. */
+const VERTICAL_RATIO = 0.5;
+
+function isVerticalSpan(p1: Vec3, p2: Vec3, length: number, up: UpAxis): boolean {
+  const axis = upAxisIndex(up);
+  const span = Math.abs((p2[axis] ?? 0) - (p1[axis] ?? 0));
+  return span / Math.max(length, 1e-15) >= VERTICAL_RATIO;
+}
+
+/**
+ * Deriva = desplazamiento horizontal relativo a la base de la barra dividido
+ * por la altura sobre esa base. Sólo se evalúa en barras verticales.
+ */
+function driftAt(
+  vertical: boolean,
+  point: Vec3,
+  basePoint: Vec3,
+  displacement: Vec3,
+  baseDisplacement: Vec3,
+  up: UpAxis,
+): number {
+  if (!vertical) return 0;
+  const axis = upAxisIndex(up);
+  const height = Math.abs((point[axis] ?? 0) - (basePoint[axis] ?? 0));
+  if (height <= 1e-12) return 0;
+  const [h1, h2] = horizontalAxisIndices(up);
+  return (
+    Math.hypot(
+      (displacement[h1] ?? 0) - (baseDisplacement[h1] ?? 0),
+      (displacement[h2] ?? 0) - (baseDisplacement[h2] ?? 0),
+    ) / height
+  );
 }
 
 export interface DeformedFrameCurve {
@@ -248,8 +285,8 @@ export function buildDeformedFrame(
     add(point, scale(globalDisplacements[index] ?? [0, 0, 0], factor)),
   );
 
-  const verticalSpan = Math.abs(p2[2] - p1[2]);
-  const isVertical = verticalSpan / Math.max(frame.length, 1e-15) >= 0.5;
+  const up = options.upAxis ?? DEFAULT_UP_AXIS;
+  const isVertical = isVerticalSpan(p1, p2, frame.length, up);
   const basePoint = undeformedPoints[0] ?? p1;
   const baseDisplacement = globalDisplacements[0] ?? [0, 0, 0];
   const magnitude: number[] = [];
@@ -265,14 +302,8 @@ export function buildDeformedFrame(
     ux.push(displacement[0]);
     uy.push(displacement[1]);
     uz.push(displacement[2]);
-    const dz = Math.abs(point[2] - basePoint[2]);
     drift.push(
-      isVertical && dz > 1e-12
-        ? Math.hypot(
-            displacement[0] - baseDisplacement[0],
-            displacement[1] - baseDisplacement[1],
-          ) / dz
-        : 0,
+      driftAt(isVertical, point, basePoint, displacement, baseDisplacement, up),
     );
   }
 
@@ -318,6 +349,7 @@ export function deformationHeatRange(
   model: PymasModel,
   result: PatternResultData,
   scalar: HeatmapScalar,
+  upAxis: UpAxis = DEFAULT_UP_AXIS,
 ): { min: number; max: number } {
   const values: number[] = [];
 
@@ -328,7 +360,7 @@ export function deformationHeatRange(
     const series = frameResult.internalDisplacements;
     const stations = sanitizeStations(series.stations);
     const { p1, p2 } = framePositions(frame, model.nodes);
-    const vertical = Math.abs(p2[2] - p1[2]) / Math.max(frame.length, 1e-15) >= 0.5;
+    const vertical = isVerticalSpan(p1, p2, frame.length, upAxis);
     const baseDisplacement = localToGlobal(
       [seriesAt(series.ux, 0), seriesAt(series.uy, 0), seriesAt(series.uz, 0)],
       frame.localAxes,
@@ -358,14 +390,8 @@ export function deformationHeatRange(
           break;
         case "drift": {
           const point = pointAtStation(p1, p2, stations[index] ?? 0);
-          const dz = Math.abs(point[2] - p1[2]);
           values.push(
-            vertical && dz > 1e-12
-              ? Math.hypot(
-                  displacement[0] - baseDisplacement[0],
-                  displacement[1] - baseDisplacement[1],
-                ) / dz
-              : 0,
+            driftAt(vertical, point, p1, displacement, baseDisplacement, upAxis),
           );
           break;
         }

@@ -29,6 +29,29 @@ import SelectionHighlight from "./SelectionHighlight";
 import ChartCursorMarker from "./ChartCursorMarker";
 import { registerCapture, type CaptureBackground } from "./captureRegistry";
 import { applyCapturePalette } from "./capturePalette";
+import { modelToView, viewAxisNames, type UpAxis } from "../../engine/upAxis";
+import { upAxisQuaternion } from "./threeUtils";
+
+const AXIS_COLORS: Record<string, string> = {
+  X: "#ef4444",
+  Y: "#22c55e",
+  Z: "#3b82f6",
+};
+
+/**
+ * Límites del modelo expresados en la vista. La rotación es una permutación de
+ * ejes, así que basta con permutar mínimos, máximos, centro y tamaño.
+ */
+function toViewBounds(bounds: ModelBounds, up: UpAxis): ModelBounds {
+  if (up === "z") return bounds;
+  return {
+    min: modelToView(bounds.min, up),
+    max: modelToView(bounds.max, up),
+    center: modelToView(bounds.center, up),
+    size: modelToView(bounds.size, up),
+    diagonal: bounds.diagonal,
+  };
+}
 
 const VIEW_DIRECTIONS: Record<ViewPreset, Vec3> = {
   iso: [1, -1, 0.82],
@@ -409,13 +432,21 @@ interface ScenePaneProps {
 
 function ScenePane({
   id,
-  bounds,
+  bounds: modelSpaceBounds,
   projection,
   sync,
   onBackgroundClick,
   children,
 }: ScenePaneProps) {
   const view = useModelStore((state) => state.view);
+  const upAxis = useModelStore((state) => state.upAxis);
+  // Cámara, grilla y luces viven en la vista (Z-up); el modelo va rotado.
+  const bounds = useMemo(
+    () => toViewBounds(modelSpaceBounds, upAxis),
+    [modelSpaceBounds, upAxis],
+  );
+  const modelRotation = upAxisQuaternion(upAxis);
+  const gizmoLabels = viewAxisNames(upAxis);
   const fitToken = useModelStore((state) => state.fitToken);
   const viewToken = useModelStore((state) => state.viewToken);
   const theme = useThemeStore((state) => state.theme);
@@ -506,7 +537,7 @@ function ScenePane({
       />
 
       <Grid bounds={bounds} />
-      {children}
+      <group quaternion={modelRotation}>{children}</group>
 
       <PaneControls id={id} sync={sync} />
       <CameraRig
@@ -520,7 +551,12 @@ function ScenePane({
 
       <GizmoHelper alignment="bottom-right" margin={[68, 68]}>
         <GizmoViewport
-          axisColors={["#ef4444", "#22c55e", "#3b82f6"]}
+          labels={gizmoLabels}
+          axisColors={[
+            AXIS_COLORS[gizmoLabels[0]] ?? "#ef4444",
+            AXIS_COLORS[gizmoLabels[1]] ?? "#22c55e",
+            AXIS_COLORS[gizmoLabels[2]] ?? "#3b82f6",
+          ]}
           labelColor={light ? "#0f172a" : "#e2e8f0"}
           hideNegativeAxes={false}
         />

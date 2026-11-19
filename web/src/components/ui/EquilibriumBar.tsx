@@ -7,9 +7,11 @@ import {
   sumResultReactions,
 } from "../../engine/equilibrium";
 import { formatNumber } from "../../engine/geometry";
+import { viewPlaneLabel } from "../../engine/upAxis";
 
 export default function EquilibriumBar() {
   const model = useModelStore((state) => state.model);
+  const upAxis = useModelStore((state) => state.upAxis);
   const activePatternId = useModelStore((state) => state.activePatternId);
   const resultMode = useModelStore((state) => state.resultMode);
   const activeCombinationId = useModelStore((state) => state.activeCombinationId);
@@ -64,7 +66,8 @@ export default function EquilibriumBar() {
   return (
     <footer className="relative z-20 flex h-8 shrink-0 items-center gap-2 overflow-hidden border-t border-white/10 bg-slate-950/90 px-3 text-[10px] text-slate-400">
       <span className="hidden items-center gap-1 font-mono text-slate-500 sm:flex">
-        <span className="text-sky-400">Z↑</span> plano XY
+        <span className="text-sky-400">{upAxis.toUpperCase()}↑</span> plano{" "}
+        {viewPlaneLabel("plan", upAxis)}
       </span>
       <span className="hidden h-3.5 w-px bg-white/10 sm:block" />
 
