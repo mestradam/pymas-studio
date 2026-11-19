@@ -37,6 +37,7 @@ export default function DeformedStructure({
   const showGhost = useModelStore((state) => state.showGhost);
   const animate = useModelStore((state) => state.animateDeformation);
   const heatmapMode = useModelStore((state) => state.heatmapMode);
+  const upAxis = useModelStore((state) => state.upAxis);
   const theme = useThemeStore((state) => state.theme);
   const light = theme === "light";
   const animateRef = useRef(animate);
@@ -48,13 +49,14 @@ export default function DeformedStructure({
     const deformation = buildDeformation(model, result, {
       scale: factor,
       subdivisions: 8,
+      upAxis,
     });
     const range =
       heatmapMode === "none"
         ? { min: 0, max: 0 }
-        : deformationHeatRange(model, result, heatmapMode);
+        : deformationHeatRange(model, result, heatmapMode, upAxis);
     return { deformation, factor, autoScale, range };
-  }, [model, result, deformationScale, heatmapMode]);
+  }, [model, result, deformationScale, heatmapMode, upAxis]);
 
   const scene = useMemo(() => {
     const base: number[] = [];

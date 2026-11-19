@@ -4,6 +4,7 @@ import {
   autoDeformationScale,
   buildDeformation,
   buildDeformedFrame,
+  deformationHeatRange,
   deformedPointAt,
   hermiteInterpolateVectors,
 } from "./deformation";
@@ -142,6 +143,36 @@ describe("deformada · ejes locales contra fixtures", () => {
     expect(verticalCurves).toBeGreaterThan(0);
     expect(horizontalCurves).toBeGreaterThan(0);
   });
+
+  it.each(["x", "y", "z"] as const)(
+    "la deriva usa el eje vertical elegido (up=%s)",
+    (upAxis) => {
+      const { model } = loadFixture("space_frame.json");
+      const result = firstResult(model);
+      const axis = { x: 0, y: 1, z: 2 }[upAxis];
+
+      for (const frameId of model.frameOrder) {
+        const frame = model.frames[frameId];
+        if (!frame || !result.frameResults[frameId]) continue;
+        const curve = buildDeformedFrame(model, result, frameId, {
+          subdivisions: 3,
+          upAxis,
+        });
+        const { p1, p2 } = framePositions(frame, model.nodes);
+        const vertical =
+          Math.abs((p2[axis] ?? 0) - (p1[axis] ?? 0)) / Math.max(frame.length, 1e-15) >=
+          0.5;
+        expect(curve.isVertical).toBe(vertical);
+        if (!vertical) {
+          expect(curve.heat.drift.every((value) => value === 0)).toBe(true);
+        }
+      }
+
+      const range = deformationHeatRange(model, result, "drift", upAxis);
+      expect(Number.isFinite(range.max)).toBe(true);
+      expect(range.min).toBeGreaterThanOrEqual(0);
+    },
+  );
 });
 
 describe("deformada · todos los fixtures", () => {
