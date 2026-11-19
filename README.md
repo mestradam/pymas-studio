@@ -114,7 +114,7 @@ original, y `develop` como rama de integración.
 
 | Rama | Propósito | Reglas |
 | --- | --- | --- |
-| `main` | Código estable y desplegable. | Sólo recibe merges desde `release/*` y `hotfix/*`. Cada merge se etiqueta con una versión. Sin commits directos. |
+| `main` | Código estable y desplegable. | Recibe merges desde `develop`. Si el proyecto crece, puede pasar a recibir merges sólo desde `release/*` y `hotfix/*`. Cada merge se etiqueta con una versión. Sin commits directos. |
 | `develop` | Integración del trabajo en curso. | Recibe merges desde `feature/*` mediante Pull Request. Es la base para nuevas funcionalidades y releases. Sin commits directos. |
 
 ### Ramas de apoyo
@@ -127,6 +127,11 @@ original, y `develop` como rama de integración.
 
 Los nombres deben ser descriptivos y en minúsculas, por ejemplo
 `feature/inspector-barras`, `release/0.2.0` o `hotfix/0.1.1`.
+
+Para el tamaño actual del proyecto, `main` se actualiza directamente desde
+`develop` al cerrar cada versión. Más adelante se puede adoptar el flujo
+completo con ramas `release/*` para estabilización y `hotfix/*` para
+correcciones urgentes, sin cambiar el resto del flujo.
 
 ### Ciclo de una funcionalidad
 
@@ -149,6 +154,10 @@ Después se abre un **Pull Request de `feature/inspector-barras` hacia
 se fusiona con merge commit (`--no-ff`) y se elimina la rama de funcionalidad.
 
 ### Publicación de una versión
+
+Con el flujo simplificado actual, se fusiona `develop` en `main` con `--no-ff`
+y se crea el tag correspondiente. Cuando se adopte el esquema con `release/*`,
+el procedimiento será:
 
 ```bash
 git switch -c release/0.2.0 develop
