@@ -99,7 +99,6 @@ export default function NodeMarkers({
   const glyphRotation = useMemo(() => inverseUpAxisQuaternion(upAxis), [upAxis]);
   const nodeRadius = Math.max(diagonal * 0.0045, 1e-4);
   const supportSize = Math.max(diagonal * 0.018, nodeRadius * 2.6);
-  const labelScale = Math.max(diagonal * 1.6, 1);
   const nodes = model.nodeOrder.map((id) => model.nodes[id]).filter((n) => n !== undefined);
   const supports = Object.values(model.supports).filter(
     (support) => support.kind !== "free" && model.nodes[support.node],
@@ -146,7 +145,6 @@ export default function NodeMarkers({
             key={`label-${node.id}`}
             position={[node.x, node.y, node.z]}
             center
-            distanceFactor={labelScale}
             zIndexRange={[20, 0]}
             className="pointer-events-none select-none"
           >

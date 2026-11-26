@@ -12,9 +12,9 @@ import { useModelStore, type RenderMode } from "../../store/useModelStore";
 import type { HeatmapMode } from "../../engine/heatmap";
 import { heatmapColor } from "../../engine/heatmap";
 import {
-  buildDeformedFrame,
-  deformationHeatRange,
-} from "../../engine/deformation";
+  frameHeatStations,
+  resultHeatRange,
+} from "../../engine/resultHeatmap";
 import { useThemeStore } from "../../store/useThemeStore";
 
 interface FrameMeshProps {
@@ -144,7 +144,7 @@ export default function FrameMesh({
 
   const heatRange = useMemo(() => {
     if (renderMode === "wire" || !result || !scalar) return null;
-    const range = deformationHeatRange(model, result, scalar, upAxis);
+    const range = resultHeatRange(model, result, scalar, upAxis);
     return range.max - range.min > 1e-15 ? range : null;
   }, [model, result, scalar, renderMode, upAxis]);
 
@@ -199,16 +199,22 @@ export default function FrameMesh({
       const base = new THREE.Color(baseColor);
 
       let stations: StationValue[];
+      let heatAvailable = false;
       if (result && scalar && heatRange) {
         try {
-          const curve = buildDeformedFrame(model, result, frameId, {
+          const series = frameHeatStations(model, result, frameId, scalar, {
             subdivisions: 6,
             upAxis,
           });
-          stations = sanitizeStations(
-            curve.stations,
-            curve.heat[scalar],
-          );
+          if (series) {
+            stations = sanitizeStations(series.stations, series.values);
+            heatAvailable = true;
+          } else {
+            stations = [
+              { station: 0, value: 0 },
+              { station: 1, value: 0 },
+            ];
+          }
         } catch {
           stations = [
             { station: 0, value: 0 },
@@ -225,7 +231,7 @@ export default function FrameMesh({
       const stationColors: Array<[number, number, number]> = stations.map(
         (entry) => {
           if (override) return [base.r, base.g, base.b];
-          if (scalar && heatRange) {
+          if (scalar && heatRange && heatAvailable) {
             const [r, g, b] = heatmapColor(
               entry.value,
               heatRange.min,

@@ -122,7 +122,6 @@ export default function ChartCursorMarker({
       <Html
         position={[0, markerRadius * 2.4, 0]}
         center
-        distanceFactor={Math.max(diagonal * 1.7, 1)}
         zIndexRange={[50, 0]}
         className="pointer-events-none select-none"
       >
