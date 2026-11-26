@@ -17,19 +17,19 @@ import {
 /**
  * Motor puro de diagramas para el visor.
  *
- * Los esfuerzos internos y los desplazamientos internos que exporta pymas
+ * Las acciones internas y los desplazamientos internos que exporta pymas
  * están expresados en el sistema local de cada barra.  Por eso cada serie se
  * proyecta sobre los ejes locales `x`, `y`, `z` del modelo normalizado (los
  * `local_axes` exportados tienen prioridad; si faltan, el parser los calcula
  * con la convención del plano).
  *
- * Convención de dibujo:
- *   fx  -> eje x (axial)
- *   fy  -> eje y (cortante en el plano x-y)
- *   fz  -> eje z (cortante en el plano x-z)
- *   mx  -> eje x (torsión)
- *   my  -> eje z (flexión en el plano x-z)
- *   mz  -> eje y (flexión en el plano x-y)
+ * Convención de dibujo (la ordenada siempre es perpendicular a la barra):
+ *   fx (N)  -> eje z (axial; se abate al plano x-z para que sea visible)
+ *   fy (Vy) -> eje y (cortante en el plano x-y)
+ *   fz (Vz) -> eje z (cortante en el plano x-z)
+ *   mx (T)  -> eje z (torsión; se abate al plano x-z para que sea visible)
+ *   my (My) -> eje z (flexión en el plano x-z)
+ *   mz (Mz) -> eje y (flexión en el plano x-y)
  *   ux/rx -> eje x, uy/ry -> eje y, uz/rz -> eje z
  *
  * Cada diagrama conserva las estaciones reales exportadas (normalizadas 0..1),
@@ -49,12 +49,36 @@ export type LocalAxis = "x" | "y" | "z";
 
 export const DEFAULT_DIAGRAM_STATIONS = [0, 0.25, 0.5, 0.75, 1];
 
-/** Eje local sobre el que se dibuja cada esfuerzo interno. */
+/** Nombre corto de cada acción interna (N, Vy, Vz, T, My, Mz). */
+export const FORCE_LABELS: Record<ForceComponent, string> = {
+  fx: "N",
+  fy: "Vy",
+  fz: "Vz",
+  mx: "T",
+  my: "My",
+  mz: "Mz",
+};
+
+/** Nombre descriptivo de cada acción interna, para gráficas e inspector. */
+export const FORCE_LONG_LABELS: Record<ForceComponent, string> = {
+  fx: "N · axial",
+  fy: "Vy · cortante",
+  fz: "Vz · cortante",
+  mx: "T · torsión",
+  my: "My · flexión",
+  mz: "Mz · flexión",
+};
+
+/**
+ * Eje local sobre el que se dibuja cada acción interna. N y T actúan a lo
+ * largo del eje x de la barra; dibujarlos sobre él los haría invisibles, así
+ * que se abaten al eje local z, perpendicular a la barra.
+ */
 export const FORCE_PLOT_AXIS: Record<ForceComponent, LocalAxis> = {
-  fx: "x",
+  fx: "z",
   fy: "y",
   fz: "z",
-  mx: "x",
+  mx: "z",
   my: "z",
   mz: "y",
 };
@@ -130,7 +154,7 @@ export interface DiagramSample {
 export interface AutoDiagramScaleOptions {
   /** Fracción de la diagonal del modelo usada como ordenada máxima. */
   targetFraction?: number;
-  /** Componentes a considerar (por defecto los seis esfuerzos). */
+  /** Componentes a considerar (por defecto las seis acciones internas). */
   components?: readonly ForceComponent[];
   /** Barras a considerar (por defecto todas las que tengan resultados). */
   frames?: readonly string[];
@@ -360,7 +384,7 @@ export function sampleDiagram(series: DiagramSeries, station: number): DiagramSa
 }
 
 /**
- * Escala automática: la ordenada máxima de todos los esfuerzos considerados
+ * Escala automática: la ordenada máxima de todas las acciones internas consideradas
  * ocupa una fracción de la diagonal del modelo.  Devuelve 1 si no hay datos.
  */
 export function autoDiagramScale(

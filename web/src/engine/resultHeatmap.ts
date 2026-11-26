@@ -17,9 +17,9 @@ import { DEFAULT_UP_AXIS, type UpAxis } from "./upAxis";
  * Unifica dos fuentes que hasta ahora vivían separadas:
  *  - los desplazamientos de la deformada (globales) y la deriva, calculados con
  *    el motor de deformación;
- *  - los seis esfuerzos internos locales exportados por pymas (`fx`…`mz`).
+ *  - las seis acciones internas locales exportadas por pymas (`fx`…`mz`).
  *
- * Los esfuerzos se leen en las estaciones exportadas, sin densificar, porque el
+ * Las acciones internas se leen en las estaciones exportadas, sin densificar, porque el
  * diagrama clásico ya es lineal entre estaciones. La escena y la leyenda usan
  * el mismo rango para que los colores coincidan exactamente.
  */
@@ -45,7 +45,7 @@ function normalizedStations(
   return Array.from({ length: count }, (_, index) => index / (count - 1));
 }
 
-/** Serie de un esfuerzo interno en las estaciones exportadas de la barra. */
+/** Serie de una acción interna en las estaciones exportadas de la barra. */
 export function frameForceHeatSeries(
   frameResult: FrameResultData,
   scalar: HeatmapScalar,
@@ -62,7 +62,7 @@ export function frameForceHeatSeries(
 /**
  * Estaciones y valores para colorear una barra.
  *
- * - Esfuerzos: estaciones exportadas de `internal_forces`.
+ * - Acciones internas: estaciones exportadas de `internal_forces`.
  * - Deformada: la misma curva densificada que dibuja `DeformedStructure`.
  *
  * Devuelve `null` cuando la barra no tiene resultados, para que la escena caiga
@@ -93,7 +93,7 @@ export function frameHeatStations(
 }
 
 /**
- * Rango global del mapa de calor. Para esfuerzos recorre todas las barras; para
+ * Rango global del mapa de calor. Para acciones internas recorre todas las barras; para
  * la deformada delega en `deformationHeatRange` para no duplicar la lógica de
  * deriva y cerchas.
  */

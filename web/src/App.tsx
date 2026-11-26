@@ -10,6 +10,7 @@ import LoadingOverlay from "./components/ui/LoadingOverlay";
 import ErrorToast from "./components/ui/ErrorToast";
 import DropZoneOverlay from "./components/ui/DropZoneOverlay";
 import ElementInspector from "./components/ui/ElementInspector";
+import ChartCursorReadout from "./components/ui/ChartCursorReadout";
 import ResultsTables from "./components/ui/ResultsTables";
 import ComparePanel, { CompareLegend } from "./components/ui/ComparePanel";
 import { useGlobalDrop } from "./components/ui/useGlobalDrop";
@@ -104,6 +105,7 @@ export default function App() {
           <ErrorToast />
 
           <ElementInspector />
+          <ChartCursorReadout />
 
           <ComparePanel />
           <CompareLegend />
