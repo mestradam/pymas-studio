@@ -51,7 +51,6 @@ export default function SelectionHighlight({
 
   const frameRadius = Math.max(diagonal * 0.007, 1e-5);
   const nodeRadius = Math.max(diagonal * 0.014, 1e-5);
-  const labelScale = Math.max(diagonal * 1.6, 1);
 
   return (
     <group>
@@ -93,7 +92,6 @@ export default function SelectionHighlight({
           <Html
             position={frameGeometry.center}
             center
-            distanceFactor={labelScale}
             zIndexRange={[40, 0]}
             className="pointer-events-none select-none"
           >
@@ -129,7 +127,6 @@ export default function SelectionHighlight({
           <Html
             position={[0, 0, nodeRadius * 1.6]}
             center
-            distanceFactor={labelScale}
             zIndexRange={[40, 0]}
             className="pointer-events-none select-none"
           >
