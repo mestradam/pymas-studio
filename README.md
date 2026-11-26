@@ -234,7 +234,7 @@ git push origin --delete hotfix/0.2.1    # si se publicó la rama
 
 ### Estado actual de las ramas
 
-* `main`: v0.2.0, desplegada en GitHub Pages.
+* `main`: v0.3.0, desplegada en GitHub Pages.
 * `develop`: al día con `main`; la próxima versión saldrá por una rama
   `release/*`.
 
