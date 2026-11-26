@@ -7,7 +7,12 @@ import {
   frameSectionHalfExtents,
   interpolateScalarSeries,
 } from "./deformedSolid";
-import { buildFrameDiagram, FORCE_COMPONENTS, FORCE_LABELS } from "./diagrams";
+import {
+  buildFrameDiagram,
+  FORCE_COMPONENTS,
+  FORCE_LABELS,
+  modelPlaneNormal,
+} from "./diagrams";
 import { deformationHeatRange } from "./deformation";
 import { allFixtures, loadFixture } from "./testUtils";
 
@@ -154,6 +159,35 @@ describe("acciones internas", () => {
         const diagram = buildFrameDiagram(model, result, frameId, component);
         expect(Math.abs(dot(diagram.axisVector, frame.localAxes.x))).toBeLessThan(1e-9);
       }
+    }
+  });
+
+  it("en modelos planos N y T quedan dentro del plano del modelo", () => {
+    for (const file of ["F3_analisis_cercha.json", "simple_beam.json", "simple_bar.json"]) {
+      const { model } = loadFixture(file);
+      const result = firstResult(model);
+      const normal = modelPlaneNormal(model);
+      expect(normal, file).not.toBeNull();
+      for (const frameId of model.frameOrder) {
+        if (!result.frameResults[frameId]) continue;
+        for (const component of ["fx", "mx"] as const) {
+          const diagram = buildFrameDiagram(model, result, frameId, component);
+          expect(Math.abs(dot(diagram.axisVector, normal!)), file).toBeLessThan(1e-9);
+        }
+      }
+    }
+    // Las cerchas planas de pymas están en XY: la normal es el Z global.
+    const normal = modelPlaneNormal(loadFixture("F3_analisis_cercha.json").model)!;
+    expect(Math.abs(normal[2])).toBeCloseTo(1, 9);
+  });
+
+  it("en modelos 3D N y T se dibujan sobre el eje local z", () => {
+    for (const file of ["space_frame.json", "eiffel_tower.json"]) {
+      const { model } = loadFixture(file);
+      expect(modelPlaneNormal(model), file).toBeNull();
+      const result = firstResult(model);
+      const frameId = model.frameOrder.find((id) => result.frameResults[id])!;
+      expect(buildFrameDiagram(model, result, frameId, "fx").axis).toBe("z");
     }
   });
 });
