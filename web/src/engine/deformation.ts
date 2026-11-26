@@ -1,4 +1,4 @@
-import type { PatternResultData, PymasModel } from "../types/pymas";
+import type { FrameData, PatternResultData, PymasModel } from "../types/pymas";
 import {
   add,
   distance,
@@ -8,7 +8,7 @@ import {
   scale,
   type Vec3,
 } from "./geometry";
-import type { HeatmapScalar } from "./heatmap";
+import type { DeformationScalar } from "./heatmap";
 import { heatmapRange } from "./heatmap";
 import { DEFAULT_UP_AXIS, horizontalAxisIndices, upAxisIndex, type UpAxis } from "./upAxis";
 
@@ -19,6 +19,13 @@ import { DEFAULT_UP_AXIS, horizontalAxisIndices, upAxisIndex, type UpAxis } from
  * barra. Para dibujar la curva se interpolan las tres componentes locales con
  * Hermite cúbico entre estaciones, se transforman a global con `local_axes` y
  * se suman a la posición indeformada.
+ *
+ * Las barras de celosía (`bar`, `plane_truss`, `space_truss` o con rigidez a
+ * flexión desactivada) son una excepción: pymas sólo exporta su componente
+ * axial, así que la deformada se reconstruye interpolando linealmente los
+ * desplazamientos nodales. El resultado es la cuerda recta entre los dos nudos
+ * desplazados, sin las oscilaciones que produciría Hermite sobre datos
+ * incompletos.
  */
 
 export const DEFAULT_DEFORMATION_STATIONS = [0, 0.25, 0.5, 0.75, 1];
@@ -85,7 +92,7 @@ export interface DeformedFrameCurve {
   deformedPoints: Vec3[];
   isVertical: boolean;
   maxMagnitude: number;
-  heat: Record<HeatmapScalar, number[]>;
+  heat: Record<DeformationScalar, number[]>;
 }
 
 export interface DeformationModelData {
@@ -244,6 +251,76 @@ function localToGlobal(vector: Vec3, axes: { x: Vec3; y: Vec3; z: Vec3 }): Vec3 
   ];
 }
 
+function globalToLocal(vector: Vec3, axes: { x: Vec3; y: Vec3; z: Vec3 }): Vec3 {
+  return [
+    vector[0] * axes.x[0] + vector[1] * axes.x[1] + vector[2] * axes.x[2],
+    vector[0] * axes.y[0] + vector[1] * axes.y[1] + vector[2] * axes.y[2],
+    vector[0] * axes.z[0] + vector[1] * axes.z[1] + vector[2] * axes.z[2],
+  ];
+}
+
+/**
+ * Una barra se dibuja como celosía cuando el modelo lo declara (`bar`,
+ * `plane_truss`, `space_truss`) o cuando no tiene rigidez a flexión en ningún
+ * eje. En esos casos pymas sólo exporta la componente axial de los
+ * desplazamientos internos y la deformada debe reconstruirse con los
+ * desplazamientos nodales.
+ */
+export function isTrussFrame(model: PymasModel, frame: FrameData): boolean {
+  const type = model.meta.type.toLowerCase();
+  if (type.includes("truss") || type === "bar") return true;
+  return !frame.stiffness.bending_y && !frame.stiffness.bending_z;
+}
+
+function subdivisionsFor(options: DeformationOptions, stationCount: number): number {
+  const requested =
+    options.subdivisions ??
+    Math.max(2, Math.min(8, Math.ceil(96 / Math.max(stationCount - 1, 1))));
+  return Math.max(2, Math.min(32, Math.floor(requested)));
+}
+
+/** Estaciones densificadas con la misma rejilla que usa Hermite. */
+function densifyStations(sourceStations: number[], subdivisions: number): number[] {
+  const xs = sourceStations.length >= 2 ? sourceStations : [0, 1];
+  const steps = Math.max(2, Math.min(32, Math.floor(subdivisions)));
+  const outStations: number[] = [];
+  for (let segment = 0; segment < xs.length - 1; segment += 1) {
+    const x0 = xs[segment] ?? 0;
+    const x1 = xs[segment + 1] ?? 1;
+    const dx = x1 - x0;
+    for (let step = 0; step < steps; step += 1) {
+      outStations.push(x0 + (step / steps) * dx);
+    }
+  }
+  outStations.push(xs[xs.length - 1] ?? 1);
+  return outStations;
+}
+
+function nodalDisplacement(result: PatternResultData, nodeId: string): Vec3 | undefined {
+  const displacement = result.nodalDisplacements[nodeId];
+  if (!displacement) return undefined;
+  return [displacement.ux, displacement.uy, displacement.uz];
+}
+
+/**
+ * Cuerda recta entre los nudos desplazados de una barra de celosía. Devuelve
+ * `null` si faltan los desplazamientos nodales para reconstruirla.
+ */
+function interpolateNodalDisplacements(
+  result: PatternResultData,
+  frame: FrameData,
+  stations: number[],
+): Vec3[] | null {
+  const uI = nodalDisplacement(result, frame.nodeI);
+  const uJ = nodalDisplacement(result, frame.nodeJ);
+  if (!uI || !uJ) return null;
+  return stations.map((station) => [
+    (1 - station) * uI[0] + station * uJ[0],
+    (1 - station) * uI[1] + station * uJ[1],
+    (1 - station) * uI[2] + station * uJ[2],
+  ]);
+}
+
 export function buildDeformedFrame(
   model: PymasModel,
   result: PatternResultData,
@@ -260,27 +337,42 @@ export function buildDeformedFrame(
   }
 
   const series = frameResult.internalDisplacements;
-  const sourceStations = sanitizeStations(series.stations);
-  const sourceValues: Vec3[] = sourceStations.map((_, index) => [
-    seriesAt(series.ux, index),
-    seriesAt(series.uy, index),
-    seriesAt(series.uz, index),
-  ]);
-
-  const subdivisions =
-    options.subdivisions ??
-    Math.max(2, Math.min(8, Math.ceil(96 / Math.max(sourceStations.length - 1, 1))));
-  const hermite = hermiteInterpolateVectors(sourceStations, sourceValues, subdivisions);
   const factor = Number.isFinite(options.scale) ? (options.scale ?? 1) : 1;
-
   const { p1, p2 } = framePositions(frame, model.nodes);
-  const undeformedPoints = hermite.stations.map((station) =>
-    pointAtStation(p1, p2, station),
-  );
-  const localDisplacements = hermite.values;
-  const globalDisplacements = localDisplacements.map((value) =>
-    localToGlobal(value, frame.localAxes),
-  );
+
+  const sourceStations = sanitizeStations(series.stations);
+  const subdivisions = subdivisionsFor(options, sourceStations.length);
+  const truss = isTrussFrame(model, frame);
+  const trussStations = truss ? densifyStations(sourceStations, subdivisions) : null;
+  const trussDisplacements = trussStations
+    ? interpolateNodalDisplacements(result, frame, trussStations)
+    : null;
+
+  let stations: number[];
+  let localDisplacements: Vec3[];
+  let globalDisplacements: Vec3[];
+
+  if (trussStations && trussDisplacements) {
+    stations = trussStations;
+    globalDisplacements = trussDisplacements;
+    localDisplacements = trussDisplacements.map((value) =>
+      globalToLocal(value, frame.localAxes),
+    );
+  } else {
+    const sourceValues: Vec3[] = sourceStations.map((_, index) => [
+      seriesAt(series.ux, index),
+      seriesAt(series.uy, index),
+      seriesAt(series.uz, index),
+    ]);
+    const hermite = hermiteInterpolateVectors(sourceStations, sourceValues, subdivisions);
+    stations = hermite.stations;
+    localDisplacements = hermite.values;
+    globalDisplacements = localDisplacements.map((value) =>
+      localToGlobal(value, frame.localAxes),
+    );
+  }
+
+  const undeformedPoints = stations.map((station) => pointAtStation(p1, p2, station));
   const deformedPoints = undeformedPoints.map((point, index) =>
     add(point, scale(globalDisplacements[index] ?? [0, 0, 0], factor)),
   );
@@ -310,7 +402,7 @@ export function buildDeformedFrame(
   return {
     frameId,
     sourceStations,
-    stations: hermite.stations,
+    stations,
     undeformedPoints,
     localDisplacements,
     globalDisplacements,
@@ -348,7 +440,7 @@ export function buildDeformation(
 export function deformationHeatRange(
   model: PymasModel,
   result: PatternResultData,
-  scalar: HeatmapScalar,
+  scalar: DeformationScalar,
   upAxis: UpAxis = DEFAULT_UP_AXIS,
 ): { min: number; max: number } {
   const values: number[] = [];
@@ -361,20 +453,25 @@ export function deformationHeatRange(
     const stations = sanitizeStations(series.stations);
     const { p1, p2 } = framePositions(frame, model.nodes);
     const vertical = isVerticalSpan(p1, p2, frame.length, upAxis);
-    const baseDisplacement = localToGlobal(
-      [seriesAt(series.ux, 0), seriesAt(series.uy, 0), seriesAt(series.uz, 0)],
-      frame.localAxes,
-    );
+    const trussDisplacements = isTrussFrame(model, frame)
+      ? interpolateNodalDisplacements(result, frame, stations)
+      : null;
+    const displacements =
+      trussDisplacements ??
+      stations.map((_, index) =>
+        localToGlobal(
+          [
+            seriesAt(series.ux, index),
+            seriesAt(series.uy, index),
+            seriesAt(series.uz, index),
+          ],
+          frame.localAxes,
+        ),
+      );
+    const baseDisplacement = displacements[0] ?? [0, 0, 0];
 
     for (let index = 0; index < stations.length; index += 1) {
-      const displacement = localToGlobal(
-        [
-          seriesAt(series.ux, index),
-          seriesAt(series.uy, index),
-          seriesAt(series.uz, index),
-        ],
-        frame.localAxes,
-      );
+      const displacement = displacements[index] ?? [0, 0, 0];
       switch (scalar) {
         case "magnitude":
           values.push(vectorLength(displacement));
@@ -419,6 +516,16 @@ export function autoDeformationScale(
     const frameResult = result.frameResults[frameId];
     if (!frame || !frameResult) continue;
     const series = frameResult.internalDisplacements;
+    const trussDisplacements = isTrussFrame(model, frame)
+      ? interpolateNodalDisplacements(result, frame, sanitizeStations(series.stations))
+      : null;
+    if (trussDisplacements) {
+      for (const global of trussDisplacements) {
+        maximum = Math.max(maximum, vectorLength(global));
+      }
+      continue;
+    }
+
     const count = Math.max(
       series.ux.length,
       series.uy.length,

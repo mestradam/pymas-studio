@@ -115,8 +115,8 @@ original, y `develop` como rama de integración.
 
 | Rama | Propósito | Reglas |
 | --- | --- | --- |
-| `main` | Código estable y desplegable. | Recibe merges desde `develop`. Si el proyecto crece, puede pasar a recibir merges sólo desde `release/*` y `hotfix/*`. Cada merge se etiqueta con una versión. Sin commits directos. |
-| `develop` | Integración del trabajo en curso. | Recibe merges desde `feature/*` mediante Pull Request. Es la base para nuevas funcionalidades y releases. Sin commits directos. |
+| `main` | Código estable y desplegable. Cada push publica GitHub Pages. | Recibe merges **sólo** desde `release/*` y `hotfix/*`. Cada merge se etiqueta con su versión `vX.Y.Z`. Sin commits directos. |
+| `develop` | Integración del trabajo en curso. | Recibe merges desde `feature/*` mediante Pull Request y la reintegración de `release/*` y `hotfix/*`. Es la base para nuevas funcionalidades y releases. Sin commits directos. |
 
 ### Ramas de apoyo
 
@@ -124,15 +124,10 @@ original, y `develop` como rama de integración.
 | --- | --- | --- | --- |
 | `feature/<tema>` | `develop` | `develop` | Funcionalidades, mejoras y correcciones no urgentes. Vida corta. |
 | `release/<version>` | `develop` | `main` y `develop` | Estabilización, pruebas finales y ajustes de versión. |
-| `hotfix/<version>` | `main` | `main` y `develop` | Correcciones urgentes sobre una versión ya publicada. |
+| `hotfix/<version>` | `main` | `main` y `develop` (o la `release/*` abierta) | Correcciones urgentes sobre una versión ya publicada. |
 
 Los nombres deben ser descriptivos y en minúsculas, por ejemplo
-`feature/inspector-barras`, `release/0.2.0` o `hotfix/0.1.1`.
-
-Para el tamaño actual del proyecto, `main` se actualiza directamente desde
-`develop` al cerrar cada versión. Más adelante se puede adoptar el flujo
-completo con ramas `release/*` para estabilización y `hotfix/*` para
-correcciones urgentes, sin cambiar el resto del flujo.
+`feature/inspector-barras`, `release/0.3.0` o `hotfix/0.2.1`.
 
 ### Ciclo de una funcionalidad
 
@@ -152,42 +147,72 @@ git push -u origin feature/inspector-barras
 
 Después se abre un **Pull Request de `feature/inspector-barras` hacia
 `develop`**. Una vez revisado, aprobado y con la integración continua en verde,
-se fusiona con merge commit (`--no-ff`) y se elimina la rama de funcionalidad.
+se fusiona con merge commit (`--no-ff`) y se elimina la rama de funcionalidad,
+tanto local como remota:
+
+```bash
+git switch develop
+git pull --ff-only origin develop
+git branch -d feature/inspector-barras
+git push origin --delete feature/inspector-barras   # si GitHub no la borró
+git fetch --prune
+```
 
 ### Publicación de una versión
 
-Con el flujo simplificado actual, se fusiona `develop` en `main` con `--no-ff`
-y se crea el tag correspondiente. Cuando se adopte el esquema con `release/*`,
-el procedimiento será:
+`main` nunca recibe `develop` directamente: cada versión se estabiliza en una
+rama `release/X.Y.Z`. En ella sólo entran correcciones, documentación y el
+cambio de versión; las funcionalidades nuevas esperan a la siguiente release en
+`develop`.
+
+La versión se actualiza en estos cuatro archivos:
+
+* `web/package.json` y `web/package-lock.json` (`npm version X.Y.Z --no-git-tag-version` desde `web/`)
+* `python/pyproject.toml`
+* `python/pymas_studio/__init__.py` (`__version__`)
 
 ```bash
-git switch -c release/0.2.0 develop
-# Ajustes finales, pruebas y actualización de versión
+git switch develop
+git pull --ff-only origin develop
+git switch -c release/0.3.0
+# Actualizar versión, pruebas finales y correcciones menores
+make test && make test-python && make build
+git commit -am "chore: actualizar versión a 0.3.0"
 
 git switch main
-git merge --no-ff release/0.2.0
-git tag -a v0.2.0 -m "PyMAS Studio 3D v0.2.0"
+git pull --ff-only origin main
+git merge --no-ff release/0.3.0 -m "merge: versión 0.3.0"
+git tag -a v0.3.0 -m "PyMAS Studio 3D v0.3.0"
 
 git switch develop
-git merge --no-ff release/0.2.0
-git branch -d release/0.2.0
+git merge --no-ff release/0.3.0
 git push origin main develop --tags
+
+git branch -d release/0.3.0
+git push origin --delete release/0.3.0   # si se publicó la rama
 ```
 
 ### Corrección urgente
 
+Un hotfix parte de `main` y sólo contiene la corrección mínima con su prueba de
+regresión. Si existe una `release/*` abierta, el hotfix se integra en ella en
+lugar de `develop`; la release lo llevará a `develop` al cerrarse.
+
 ```bash
 git switch -c hotfix/0.2.1 main
-# Corrección mínima y prueba de regresión
+# Corrección mínima, prueba de regresión y actualización de versión
+git commit -am "fix: ..."
 
 git switch main
-git merge --no-ff hotfix/0.2.1
+git merge --no-ff hotfix/0.2.1 -m "merge: versión 0.2.1"
 git tag -a v0.2.1 -m "PyMAS Studio 3D v0.2.1"
 
-git switch develop
+git switch develop        # o la release/* abierta
 git merge --no-ff hotfix/0.2.1
-git branch -d hotfix/0.2.1
 git push origin main develop --tags
+
+git branch -d hotfix/0.2.1
+git push origin --delete hotfix/0.2.1    # si se publicó la rama
 ```
 
 ### Reglas de integración
@@ -199,8 +224,9 @@ git push origin main develop --tags
   PR si es necesario, pero **nunca** se reescribe el historial de `main` o
   `develop`.
 * Usar merge commits (`--no-ff`) para conservar el contexto de cada rama.
-* Cada release u hotfix debe actualizar la versión, generar su tag `vX.Y.Z` y
-  volver a integrarse en `develop`.
+* Sólo las ramas `release/*` y `hotfix/*` cambian la versión; cada una genera
+  su tag `vX.Y.Z` en `main` y vuelve a integrarse en `develop`.
+* Las ramas de apoyo se eliminan (local y remota) en cuanto se fusionan.
 * No versionar artefactos generados: `web/dist/`, `web/public/samples/`,
   `node_modules/` ni `__pycache__/`.
 * Los mensajes de commit siguen Conventional Commits: `feat:`, `fix:`, `docs:`,
@@ -208,15 +234,16 @@ git push origin main develop --tags
 
 ### Estado actual de las ramas
 
-* `main`: versión estable desplegada en GitHub Pages.
-* `develop`: integración de las fases 1–5 completadas.
+* `main`: v0.3.0, desplegada en GitHub Pages.
+* `develop`: al día con `main`; la próxima versión saldrá por una rama
+  `release/*`.
 
 ## Estructura
 
 ```text
 pymas-studio/
 ├── LICENSE                    # Licencia MIT
-├── fixtures/                  # 12 exportaciones reales de pymas
+├── fixtures/                  # Exportaciones reales de pymas y volcados de proyecto
 ├── Makefile                   # Atajos: build, tests, estáticos y paquete Python
 ├── web/                       # React + TypeScript + Vite + Three.js
 │   ├── public/samples/        # Generado en cada build (no versionado)
@@ -252,10 +279,14 @@ pymas-studio/
 * Los vectores de carga se filtran por patrón activo y se autoescalan.
 * Casos de resultado: patrón exportado, combinación calculada en vivo y
   envolventes `ENV_MAX`/`ENV_MIN` sobre las combinaciones activas.
-* Deformada elástica por Hermite con escala automática/amplificable, estructura
-  fantasma, animación armónica y mapa de calor `|U|`, `ux`, `uy`, `uz` o deriva.
+* Deformada elástica por Hermite (en cerchas, cuerda recta entre nudos
+  desplazados) con escala automática/amplificable, estructura fantasma,
+  animación armónica y mapa de calor de resultados: `|U|`, `ux`, `uy`, `uz`,
+  deriva y los seis esfuerzos internos `N`, `Vy`, `Vz`, `T`, `My`, `Mz`.
 * Diagramas 3D de `Fx…Mz` en sus planos locales, con relleno por signo y
-  etiquetas en los extremos; reacciones en apoyos con `ΣFx`, `ΣFy`, `ΣFz`.
+  etiquetas en los extremos; reacciones en apoyos con `ΣFx`, `ΣFy`, `ΣFz`. El
+  mapa de calor de esfuerzos es complementario: colorea la estructura sin
+  reemplazar los diagramas clásicos.
 * **Selección interactiva** por clic sobre barras y nudos (modo alámbrico y
   extruido), con resaltado luminoso y cierre con `Esc` o clic en vacío.
 * **Inspector de elemento** en panel lateral: ficha técnica, liberaciones,
@@ -283,7 +314,7 @@ pymas-studio/
 * **Validación de diagramas**: `engine/diagrams.ts`, `engine/deformation.ts` y sus
   pruebas unitarias verifican estaciones, proyección en ejes locales, picos,
   convención de extremos, interpolación de Hermite, combinaciones lineales y
-  envolventes contra los 12 fixtures reales.
+  envolventes contra todos los fixtures reales.
 * **Inspector 2D y tablas de resultados** (Fase 4 del plan): completados con
   selección por raycasting, gráficos sincronizados con el marcador 3D, ficha de
   barras y nudos y tablas filtrables/ordenables.
