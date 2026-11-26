@@ -9,6 +9,7 @@ import {
   FORCE_LONG_LABELS,
   type ForceComponent,
 } from "./diagrams";
+import { buildDeformedFrame } from "./deformation";
 import { isFiniteNumber } from "./geometry";
 
 /**
@@ -18,8 +19,11 @@ import { isFiniteNumber } from "./geometry";
  * estaciones normalizadas 0..1; la UI las convierte a `x ∈ [0, L]`.
  */
 
-export type FrameChartKey = ForceComponent | "deflection";
-export type ChartFamily = "force" | "moment" | "displacement";
+/** Movimientos globales: desplazamientos (`u*`) y giros (`r*`). */
+export const MOVEMENT_COMPONENTS = ["ux", "uy", "uz", "rx", "ry", "rz"] as const;
+export type MovementComponent = (typeof MOVEMENT_COMPONENTS)[number];
+export type FrameChartKey = ForceComponent | MovementComponent;
+export type ChartFamily = "force" | "moment" | "displacement" | "rotation";
 
 export interface FrameChartSeries {
   key: FrameChartKey;
@@ -36,22 +40,17 @@ export const FRAME_CHART_ORDER: readonly FrameChartKey[] = [
   "mx",
   "my",
   "mz",
-  "deflection",
+  ...MOVEMENT_COMPONENTS,
 ];
 
 export const FRAME_CHART_LABELS: Record<FrameChartKey, string> = {
   ...FORCE_LONG_LABELS,
-  deflection: "δ · deflexión local",
-};
-
-export const FRAME_CHART_COLORS: Record<FrameChartKey, string> = {
-  fx: "#38bdf8",
-  fy: "#34d399",
-  fz: "#fbbf24",
-  mx: "#c084fc",
-  my: "#fb7185",
-  mz: "#f97316",
-  deflection: "#22d3ee",
+  ux: "ux · desplazamiento global",
+  uy: "uy · desplazamiento global",
+  uz: "uz · desplazamiento global",
+  rx: "rx · giro global",
+  ry: "ry · giro global",
+  rz: "rz · giro global",
 };
 
 export const FRAME_CHART_FAMILY: Record<FrameChartKey, ChartFamily> = {
@@ -61,7 +60,12 @@ export const FRAME_CHART_FAMILY: Record<FrameChartKey, ChartFamily> = {
   mx: "moment",
   my: "moment",
   mz: "moment",
-  deflection: "displacement",
+  ux: "displacement",
+  uy: "displacement",
+  uz: "displacement",
+  rx: "rotation",
+  ry: "rotation",
+  rz: "rotation",
 };
 
 export function interpolateSeriesAt(
@@ -116,8 +120,13 @@ function safeStations(stations: number[] | undefined, count: number): number[] {
   return stations.map((value) => (isFiniteNumber(value) ? value : 0));
 }
 
-/** Series de las seis acciones internas locales más la deflexión transversal. */
+/**
+ * Series del inspector: las seis acciones internas (ejes locales, en las
+ * estaciones exportadas) y los seis movimientos globales, tomados de la curva
+ * deformada sin amplificar (Hermite en pórticos, cuerda en celosías).
+ */
 export function buildFrameChartSeries(
+  model: PymasModel,
   result: PatternResultData,
   frameId: string,
 ): FrameChartSeries[] | null {
@@ -145,37 +154,25 @@ export function buildFrameChartSeries(
     values: seriesValues(frameResult.internalForces, component, forceCount),
   }));
 
-  const displacementStations = safeStations(
-    frameResult.internalDisplacements.stations,
-    Math.max(
-      frameResult.internalDisplacements.ux.length,
-      frameResult.internalDisplacements.uy.length,
-      frameResult.internalDisplacements.uz.length,
-      frameResult.internalDisplacements.stations.length,
-    ),
-  );
-  const displacementCount = displacementStations.length;
-  const uy = seriesValues(
-    frameResult.internalDisplacements,
-    "uy",
-    displacementCount,
-  );
-  const uz = seriesValues(
-    frameResult.internalDisplacements,
-    "uz",
-    displacementCount,
-  );
-  const deflection: FrameChartSeries = {
-    key: "deflection",
-    label: FRAME_CHART_LABELS.deflection,
-    family: FRAME_CHART_FAMILY.deflection,
-    stations: displacementStations,
-    values: displacementStations.map((_, index) =>
-      Math.hypot(uy[index] ?? 0, uz[index] ?? 0),
-    ),
-  };
+  let movementSeries: FrameChartSeries[] = [];
+  try {
+    const curve = buildDeformedFrame(model, result, frameId, { subdivisions: 8 });
+    movementSeries = MOVEMENT_COMPONENTS.map((component, index) => {
+      const source = index < 3 ? curve.globalDisplacements : curve.globalRotations;
+      const axis = index % 3;
+      return {
+        key: component,
+        label: FRAME_CHART_LABELS[component],
+        family: FRAME_CHART_FAMILY[component],
+        stations: [...curve.stations],
+        values: source.map((value) => value[axis] ?? 0),
+      };
+    });
+  } catch {
+    movementSeries = [];
+  }
 
-  return [...forceSeries, deflection];
+  return [...forceSeries, ...movementSeries];
 }
 
 export interface FrameForceSummary {

@@ -91,10 +91,6 @@ export default function ControlSidebar({
   onClose: () => void;
 }) {
   const model = useModelStore((state) => state.model);
-  const sourceFile = useModelStore((state) => state.sourceFile);
-  const samples = useModelStore((state) => state.samples);
-  const loadingSamples = useModelStore((state) => state.loadingSamples);
-  const loadSample = useModelStore((state) => state.loadSample);
   const activePatternId = useModelStore((state) => state.activePatternId);
   const resultMode = useModelStore((state) => state.resultMode);
   const activeCombinationId = useModelStore((state) => state.activeCombinationId);
@@ -312,33 +308,6 @@ export default function ControlSidebar({
             </section>
 
             <section>
-              <h2 className="panel-title mb-1.5">Modelo de ejemplo</h2>
-              <select
-                className="h-8 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[11px] font-medium text-slate-200 outline-none transition hover:border-white/20 focus:border-sky-400/60"
-                value={sourceFile ?? ""}
-                disabled={loadingSamples}
-                onChange={(event) => {
-                  const entry = samples.find(
-                    (sample) => sample.file === event.target.value,
-                  );
-                  if (entry) void loadSample(entry);
-                }}
-                title="Cambiar de modelo de ejemplo"
-              >
-                <option value="" disabled>
-                  {sourceFile
-                    ? "Archivo local / URL"
-                    : "Modelo cargado desde URL"}
-                </option>
-                {samples.map((sample) => (
-                  <option key={sample.file} value={sample.file}>
-                    {sample.label}
-                  </option>
-                ))}
-              </select>
-            </section>
-
-            <section>
               <h2 className="panel-title mb-1.5">Vista de cámara</h2>
               <div className="grid grid-cols-4 gap-1">
                 {VIEW_OPTIONS.map((id) => (
@@ -413,12 +382,37 @@ export default function ControlSidebar({
                 </div>
               )}
 
-              {resultMode === "pattern" && (
-                <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500">
-                  Usa el patrón seleccionado en la sección siguiente. El resultado
-                  se toma de los datos exportados.
-                </p>
-              )}
+              {resultMode === "pattern" &&
+                (model.loadPatternOrder.length > 0 ? (
+                  <div className="mt-1.5 space-y-1">
+                    <select
+                      className="h-7 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[10px] font-medium text-slate-200 outline-none transition hover:border-white/20 focus:border-sky-400/60"
+                      value={activePatternId ?? ""}
+                      onChange={(event) => setActivePattern(event.target.value)}
+                    >
+                      <option value="" disabled>
+                        Selecciona un patrón
+                      </option>
+                      {model.loadPatternOrder.map((id) => {
+                        const pattern = model.loadPatterns[id];
+                        if (!pattern) return null;
+                        return (
+                          <option key={id} value={id}>
+                            {pattern.name} · {patternLoadCount(pattern)} cargas
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <p className="text-[9px] leading-relaxed text-slate-500">
+                      Resultado tomado de los datos exportados. Los vectores de
+                      carga corresponden a este patrón.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 rounded-lg border border-white/[0.06] px-2 py-1.5 text-[10px] text-slate-500">
+                    El modelo no define patrones de carga.
+                  </div>
+                ))}
 
               {resultMode === "combination" && model.loadCombinationOrder.length > 0 && (
                 <div className="mt-1.5 space-y-1">
@@ -705,87 +699,6 @@ export default function ControlSidebar({
               </div>
             </section>
 
-            <section>
-              <div className="mb-1.5 flex items-center justify-between">
-                <h2 className="panel-title">Patrón de cargas</h2>
-                <span className="text-[10px] text-slate-500">filtra los vectores</span>
-              </div>
-              <div className="space-y-1">
-                <button
-                  type="button"
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-lg border px-2 py-1.5 text-left text-[11px] transition",
-                    activePatternId === null
-                      ? "border-sky-400/40 bg-sky-400/10 text-sky-100"
-                      : "border-white/[0.06] bg-white/[0.02] text-slate-400 hover:bg-white/[0.05]",
-                  )}
-                  onClick={() => setActivePattern(null)}
-                >
-                  <span>Ocultar cargas</span>
-                  <span className="font-mono text-[10px]">—</span>
-                </button>
-                {model.loadPatternOrder.map((id) => {
-                  const pattern = model.loadPatterns[id];
-                  if (!pattern) return null;
-                  const active = activePatternId === id;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      className={cn(
-                        "flex w-full items-center justify-between gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] transition",
-                        active
-                          ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
-                          : "border-white/[0.06] bg-white/[0.02] text-slate-300 hover:bg-white/[0.05]",
-                      )}
-                      onClick={() => setActivePattern(id)}
-                      title={pattern.name}
-                    >
-                      <span className="truncate">{pattern.name}</span>
-                      <span className="shrink-0 font-mono text-[10px] text-slate-500">
-                        {patternLoadCount(pattern)} cargas
-                      </span>
-                    </button>
-                  );
-                })}
-                {model.loadPatternOrder.length === 0 && (
-                  <div className="rounded-lg border border-white/[0.06] px-2 py-2 text-[11px] text-slate-500">
-                    El modelo no define patrones de carga.
-                  </div>
-                )}
-              </div>
-              <div className="mt-2">
-                <h3 className="panel-title mb-1.5">Dirección de flechas</h3>
-                <div className="space-y-1">
-                  {(
-                    [
-                      ["tip", "Punta en el elemento", "hacia adentro"],
-                      ["origin", "Origen en el elemento", "hacia afuera"],
-                    ] as const
-                  ).map(([id, label, hint]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className={cn(
-                        "flex w-full items-center justify-between gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] transition",
-                        loadArrowMode === id
-                          ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
-                          : "border-white/[0.06] bg-white/[0.02] text-slate-300 hover:bg-white/[0.05]",
-                      )}
-                      onClick={() => setLoadArrowMode(id)}
-                      title={`${label} (${hint})`}
-                      disabled={!showLoads}
-                    >
-                      <span className="truncate">{label}</span>
-                      <span className="shrink-0 text-[9px] uppercase tracking-wide text-slate-500">
-                        {hint}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
-
             <section className="grid grid-cols-1 gap-2">
               <div>
                 <h2 className="panel-title mb-1.5">Geometría</h2>
@@ -929,6 +842,28 @@ export default function ControlSidebar({
                   checked={showLoads}
                   onChange={setShowLoads}
                 />
+                {showLoads && (
+                  <div className="seg mx-1 mb-1 w-[calc(100%-0.5rem)]">
+                    {(
+                      [
+                        ["tip", "Punta en el elemento"],
+                        ["origin", "Origen en el elemento"],
+                      ] as const
+                    ).map(([id, label]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className={cn(
+                          "seg-btn flex-1 px-0 text-[9px]",
+                          loadArrowMode === id && "seg-btn-active",
+                        )}
+                        onClick={() => setLoadArrowMode(id)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <Toggle
                   label="Reacciones en apoyos"
                   checked={showReactions}

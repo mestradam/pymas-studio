@@ -3,12 +3,11 @@ import * as THREE from "three";
 import type { PymasModel } from "../../types/pymas";
 import type { LoadArrowMode } from "../../store/useModelStore";
 import { useThemeStore } from "../../store/useThemeStore";
+import { combinePatternLoads, type LoadFactors } from "../../engine/loads";
 import {
-  distributedLoadMagnitude,
   framePositions,
   nodePosition,
   pointAtStation,
-  projectLoadToGlobal,
   scale,
   sub,
   type Vec3,
@@ -21,7 +20,8 @@ import {
 
 interface LoadVectorsProps {
   model: PymasModel;
-  patternId: string | null;
+  /** Factores por patrón: `{patrón: 1}` o los de una combinación; `null` oculta. */
+  factors: LoadFactors | null;
   loadScale: number;
   diagonal: number;
   arrowMode: LoadArrowMode;
@@ -135,7 +135,7 @@ function Arrow({
 
 export default function LoadVectors({
   model,
-  patternId,
+  factors,
   loadScale,
   diagonal,
   arrowMode,
@@ -144,8 +144,8 @@ export default function LoadVectors({
   const palette = theme === "light" ? LIGHT_PALETTE : DARK_PALETTE;
 
   const data = useMemo(() => {
-    const pattern = patternId ? model.loadPatterns[patternId] : undefined;
-    if (!pattern) {
+    const combined = factors ? combinePatternLoads(model, factors) : null;
+    if (!combined) {
       return {
         arrows: [] as ArrowSpec[],
         moments: [] as MomentSpec[],
@@ -160,29 +160,25 @@ export default function LoadVectors({
       force: Vec3;
     }> = [];
 
-    for (const [nodeId, load] of Object.entries(pattern.nodalLoads)) {
+    for (const [nodeId, load] of Object.entries(combined.nodal)) {
       const node = model.nodes[nodeId];
       if (!node) continue;
       nodal.push({
         origin: nodePosition(node),
-        force: [load.fx, load.fy, load.fz],
-        moment: [load.mx, load.my, load.mz],
+        force: load.force,
+        moment: load.moment,
       });
     }
 
-    for (const [frameId, loads] of Object.entries(pattern.frameLoads)) {
+    for (const [frameId, force] of Object.entries(combined.frames)) {
       const frame = model.frames[frameId];
       if (!frame) continue;
+      if (Math.hypot(...force) < 1e-12) continue;
       const { p1, p2 } = framePositions(frame, model.nodes);
-      loads.forEach((load, loadIndex) => {
-        const force = projectLoadToGlobal(load, frame.localAxes);
-        const magnitude = distributedLoadMagnitude(load);
-        if (magnitude < 1e-12) return;
-        distributedGroups.push({
-          key: `distributed-${frameId}-${loadIndex}`,
-          points: STATIONS.map((station) => pointAtStation(p1, p2, station)),
-          force,
-        });
+      distributedGroups.push({
+        key: `distributed-${frameId}`,
+        points: STATIONS.map((station) => pointAtStation(p1, p2, station)),
+        force,
       });
     }
 
@@ -271,7 +267,7 @@ export default function LoadVectors({
     });
 
     return { arrows, moments, envelopes };
-  }, [model, patternId, loadScale, diagonal, arrowMode, palette]);
+  }, [model, factors, loadScale, diagonal, arrowMode, palette]);
 
   if (
     data.arrows.length === 0 &&

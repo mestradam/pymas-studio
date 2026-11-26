@@ -324,10 +324,10 @@ export default function ElementInspector() {
 
   const series = useMemo(
     () =>
-      frame && computedResult
-        ? buildFrameChartSeries(computedResult, frame.id)
+      model && frame && computedResult
+        ? buildFrameChartSeries(model, computedResult, frame.id)
         : null,
-    [frame, computedResult],
+    [model, frame, computedResult],
   );
 
   const activeCaseLabel = useMemo(() => {
@@ -494,28 +494,48 @@ export default function ElementInspector() {
               </div>
               {series ? (
                 <>
-                  <div className="space-y-1.5">
-                    {series.map((entry) => (
-                      <FrameChart
-                        key={entry.key}
-                        series={entry}
-                        length={frame.length}
-                        unit={
-                          entry.family === "force"
-                            ? units.force
-                            : entry.family === "moment"
-                              ? `${units.force}·${units.length}`
-                              : units.length
-                        }
-                        station={chartStation}
-                        onStation={setChartStation}
-                      />
-                    ))}
-                  </div>
+                  {(
+                    [
+                      ["Acciones internas · ejes locales", ["force", "moment"]],
+                      ["Movimientos · ejes globales", ["displacement", "rotation"]],
+                    ] as const
+                  ).map(([title, families]) => {
+                    const group = series.filter((entry) =>
+                      (families as readonly string[]).includes(entry.family),
+                    );
+                    if (group.length === 0) return null;
+                    return (
+                      <div key={title} className="mb-2">
+                        <h3 className="mb-1 text-[9px] uppercase tracking-wide text-slate-500">
+                          {title}
+                        </h3>
+                        <div className="space-y-1.5">
+                          {group.map((entry) => (
+                            <FrameChart
+                              key={entry.key}
+                              series={entry}
+                              length={frame.length}
+                              unit={
+                                entry.family === "force"
+                                  ? units.force
+                                  : entry.family === "moment"
+                                    ? `${units.force}·${units.length}`
+                                    : entry.family === "rotation"
+                                      ? "rad"
+                                      : units.length
+                              }
+                              station={chartStation}
+                              onStation={setChartStation}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                   <p className="mt-1.5 text-[9px] leading-relaxed text-slate-500">
                     Pasa el puntero sobre cualquier gráfico para mover el marcador
-                    naranja en el modelo 3D. El cursor se sincroniza entre los siete
-                    gráficos.
+                    naranja en el modelo 3D. El cursor se sincroniza entre todos
+                    los gráficos.
                   </p>
                 </>
               ) : (
