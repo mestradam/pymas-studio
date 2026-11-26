@@ -24,10 +24,11 @@ import {
  * con la convención del plano).
  *
  * Convención de dibujo (la ordenada siempre es perpendicular a la barra):
- *   fx (N)  -> eje z (axial; se abate al plano x-z para que sea visible)
+ *   fx (N)  -> eje perpendicular a la barra dentro del plano del modelo si
+ *              es plano (normalmente y); eje z en modelos 3D
  *   fy (Vy) -> eje y (cortante en el plano x-y)
  *   fz (Vz) -> eje z (cortante en el plano x-z)
- *   mx (T)  -> eje z (torsión; se abate al plano x-z para que sea visible)
+ *   mx (T)  -> igual que N
  *   my (My) -> eje z (flexión en el plano x-z)
  *   mz (Mz) -> eje y (flexión en el plano x-y)
  *   ux/rx -> eje x, uy/ry -> eje y, uz/rz -> eje z
@@ -166,6 +167,83 @@ export function diagramKindOf(component: DiagramComponent): DiagramKind {
     : "displacement";
 }
 
+const PLANE_NORMALS = new WeakMap<PymasModel, { normal: Vec3 | null }>();
+
+/**
+ * Normal del plano que contiene todos los nudos, o `null` si el modelo es
+ * tridimensional. Un modelo lineal (todos los nudos sobre una recta) se
+ * considera contenido en el plano XY global, que es la convención de pymas
+ * para vigas y celosías planas. Se memoriza por modelo.
+ */
+export function modelPlaneNormal(model: PymasModel): Vec3 | null {
+  const cached = PLANE_NORMALS.get(model);
+  if (cached) return cached.normal;
+
+  const points: Vec3[] = Object.values(model.nodes).map((node) => [
+    node.x,
+    node.y,
+    node.z,
+  ]);
+  let normal: Vec3 | null = null;
+  const first = points[0];
+  if (!first) {
+    normal = [0, 0, 1];
+  } else {
+    const diff = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    const cross = (a: Vec3, b: Vec3): Vec3 => [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0],
+    ];
+    const length = (a: Vec3) => Math.hypot(a[0], a[1], a[2]);
+
+    // Punto más lejano al primero: define la dirección principal.
+    let far = first;
+    for (const point of points) {
+      if (length(diff(point, first)) > length(diff(far, first))) far = point;
+    }
+    const direction = diff(far, first);
+    const size = length(direction);
+
+    // Punto más alejado de esa recta: define el plano.
+    let best: Vec3 = [0, 0, 0];
+    for (const point of points) {
+      const candidate = cross(direction, diff(point, first));
+      if (length(candidate) > length(best)) best = candidate;
+    }
+    const tolerance = Math.max(size, 1e-12) * 1e-6;
+
+    if (size < 1e-12 || length(best) / Math.max(size, 1e-12) < tolerance) {
+      normal = [0, 0, 1];
+    } else {
+      const bestLength = length(best);
+      const unit: Vec3 = [best[0] / bestLength, best[1] / bestLength, best[2] / bestLength];
+      const planar = points.every((point) => {
+        const offset = diff(point, first);
+        return Math.abs(offset[0] * unit[0] + offset[1] * unit[1] + offset[2] * unit[2]) <= tolerance;
+      });
+      normal = planar ? unit : null;
+    }
+  }
+
+  PLANE_NORMALS.set(model, { normal });
+  return normal;
+}
+
+/**
+ * Eje local sobre el que se dibujan N y T (que actúan a lo largo de la barra
+ * y por eso se abaten). En modelos planos se usa el eje perpendicular a la
+ * barra contenido en el plano del modelo, para que el diagrama se vea en la
+ * vista del plano; en modelos 3D, el eje local z.
+ */
+export function axialPlotAxis(model: PymasModel, frame: FrameData): LocalAxis {
+  const normal = modelPlaneNormal(model);
+  if (!normal) return FORCE_PLOT_AXIS.fx;
+  const along = (axis: Vec3) =>
+    Math.abs(axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2]);
+  return along(frame.localAxes.y) <= along(frame.localAxes.z) ? "y" : "z";
+}
+
 export function diagramAxis(component: DiagramComponent, kind = diagramKindOf(component)): LocalAxis {
   if (kind === "force") {
     return FORCE_PLOT_AXIS[component as ForceComponent] ?? "y";
@@ -281,7 +359,10 @@ export function buildFrameDiagram(
 
   const { p1, p2 } = framePositions(frame, model.nodes);
   const points = stations.map((station) => pointAtStation(p1, p2, station));
-  const axis = diagramAxis(component, kind);
+  const axis =
+    component === "fx" || component === "mx"
+      ? axialPlotAxis(model, frame)
+      : diagramAxis(component, kind);
   const axisVector = axisVectorOf(frame, axis);
   const offsets = values.map((value) => scale(axisVector, value * factor));
   const displayPoints = points.map((point, index) => add(point, offsets[index] ?? [0, 0, 0]));
