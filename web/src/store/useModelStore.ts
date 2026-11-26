@@ -411,7 +411,7 @@ const INITIAL_STATE: ModelState = {
   diagramComponents: ["mz"],
   diagramScale: 1,
   showDiagramLabels: true,
-  showReactions: true,
+  showReactions: false,
 
   renderMode: "extruded",
   colorMode: "material",
@@ -423,7 +423,7 @@ const INITIAL_STATE: ModelState = {
   showNodes: true,
   showLabels: false,
   showSupports: true,
-  showReleases: true,
+  showReleases: false,
   showLoads: true,
   showGrid: true,
 
