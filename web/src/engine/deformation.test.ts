@@ -534,10 +534,12 @@ describe("deformada · punto en estación (cursor 2D/3D)", () => {
       undeformedPoints: [],
       localDisplacements: [],
       globalDisplacements: [],
+      localRotations: [],
+      globalRotations: [],
       deformedPoints: [],
       isVertical: false,
       maxMagnitude: 0,
-      heat: { magnitude: [], ux: [], uy: [], uz: [], drift: [] },
+      heat: { magnitude: [], ux: [], uy: [], uz: [], rx: [], ry: [], rz: [], drift: [] },
     } satisfies Parameters<typeof deformedPointAt>[0];
     expect(deformedPointAt(empty, 0.5)).toEqual([0, 0, 0]);
   });

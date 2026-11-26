@@ -17,19 +17,20 @@ import {
 /**
  * Motor puro de diagramas para el visor.
  *
- * Los esfuerzos internos y los desplazamientos internos que exporta pymas
+ * Las acciones internas y los desplazamientos internos que exporta pymas
  * están expresados en el sistema local de cada barra.  Por eso cada serie se
  * proyecta sobre los ejes locales `x`, `y`, `z` del modelo normalizado (los
  * `local_axes` exportados tienen prioridad; si faltan, el parser los calcula
  * con la convención del plano).
  *
- * Convención de dibujo:
- *   fx  -> eje x (axial)
- *   fy  -> eje y (cortante en el plano x-y)
- *   fz  -> eje z (cortante en el plano x-z)
- *   mx  -> eje x (torsión)
- *   my  -> eje z (flexión en el plano x-z)
- *   mz  -> eje y (flexión en el plano x-y)
+ * Convención de dibujo (la ordenada siempre es perpendicular a la barra):
+ *   fx (N)  -> eje perpendicular a la barra dentro del plano del modelo si
+ *              es plano (normalmente y); eje z en modelos 3D
+ *   fy (Vy) -> eje y (cortante en el plano x-y)
+ *   fz (Vz) -> eje z (cortante en el plano x-z)
+ *   mx (T)  -> igual que N
+ *   my (My) -> eje z (flexión en el plano x-z)
+ *   mz (Mz) -> eje y (flexión en el plano x-y)
  *   ux/rx -> eje x, uy/ry -> eje y, uz/rz -> eje z
  *
  * Cada diagrama conserva las estaciones reales exportadas (normalizadas 0..1),
@@ -49,12 +50,36 @@ export type LocalAxis = "x" | "y" | "z";
 
 export const DEFAULT_DIAGRAM_STATIONS = [0, 0.25, 0.5, 0.75, 1];
 
-/** Eje local sobre el que se dibuja cada esfuerzo interno. */
+/** Nombre corto de cada acción interna (N, Vy, Vz, T, My, Mz). */
+export const FORCE_LABELS: Record<ForceComponent, string> = {
+  fx: "N",
+  fy: "Vy",
+  fz: "Vz",
+  mx: "T",
+  my: "My",
+  mz: "Mz",
+};
+
+/** Nombre descriptivo de cada acción interna, para gráficas e inspector. */
+export const FORCE_LONG_LABELS: Record<ForceComponent, string> = {
+  fx: "N · axial",
+  fy: "Vy · cortante",
+  fz: "Vz · cortante",
+  mx: "T · torsión",
+  my: "My · flexión",
+  mz: "Mz · flexión",
+};
+
+/**
+ * Eje local sobre el que se dibuja cada acción interna. N y T actúan a lo
+ * largo del eje x de la barra; dibujarlos sobre él los haría invisibles, así
+ * que se abaten al eje local z, perpendicular a la barra.
+ */
 export const FORCE_PLOT_AXIS: Record<ForceComponent, LocalAxis> = {
-  fx: "x",
+  fx: "z",
   fy: "y",
   fz: "z",
-  mx: "x",
+  mx: "z",
   my: "z",
   mz: "y",
 };
@@ -130,7 +155,7 @@ export interface DiagramSample {
 export interface AutoDiagramScaleOptions {
   /** Fracción de la diagonal del modelo usada como ordenada máxima. */
   targetFraction?: number;
-  /** Componentes a considerar (por defecto los seis esfuerzos). */
+  /** Componentes a considerar (por defecto las seis acciones internas). */
   components?: readonly ForceComponent[];
   /** Barras a considerar (por defecto todas las que tengan resultados). */
   frames?: readonly string[];
@@ -140,6 +165,83 @@ export function diagramKindOf(component: DiagramComponent): DiagramKind {
   return (FORCE_COMPONENTS as readonly string[]).includes(component)
     ? "force"
     : "displacement";
+}
+
+const PLANE_NORMALS = new WeakMap<PymasModel, { normal: Vec3 | null }>();
+
+/**
+ * Normal del plano que contiene todos los nudos, o `null` si el modelo es
+ * tridimensional. Un modelo lineal (todos los nudos sobre una recta) se
+ * considera contenido en el plano XY global, que es la convención de pymas
+ * para vigas y celosías planas. Se memoriza por modelo.
+ */
+export function modelPlaneNormal(model: PymasModel): Vec3 | null {
+  const cached = PLANE_NORMALS.get(model);
+  if (cached) return cached.normal;
+
+  const points: Vec3[] = Object.values(model.nodes).map((node) => [
+    node.x,
+    node.y,
+    node.z,
+  ]);
+  let normal: Vec3 | null = null;
+  const first = points[0];
+  if (!first) {
+    normal = [0, 0, 1];
+  } else {
+    const diff = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    const cross = (a: Vec3, b: Vec3): Vec3 => [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0],
+    ];
+    const length = (a: Vec3) => Math.hypot(a[0], a[1], a[2]);
+
+    // Punto más lejano al primero: define la dirección principal.
+    let far = first;
+    for (const point of points) {
+      if (length(diff(point, first)) > length(diff(far, first))) far = point;
+    }
+    const direction = diff(far, first);
+    const size = length(direction);
+
+    // Punto más alejado de esa recta: define el plano.
+    let best: Vec3 = [0, 0, 0];
+    for (const point of points) {
+      const candidate = cross(direction, diff(point, first));
+      if (length(candidate) > length(best)) best = candidate;
+    }
+    const tolerance = Math.max(size, 1e-12) * 1e-6;
+
+    if (size < 1e-12 || length(best) / Math.max(size, 1e-12) < tolerance) {
+      normal = [0, 0, 1];
+    } else {
+      const bestLength = length(best);
+      const unit: Vec3 = [best[0] / bestLength, best[1] / bestLength, best[2] / bestLength];
+      const planar = points.every((point) => {
+        const offset = diff(point, first);
+        return Math.abs(offset[0] * unit[0] + offset[1] * unit[1] + offset[2] * unit[2]) <= tolerance;
+      });
+      normal = planar ? unit : null;
+    }
+  }
+
+  PLANE_NORMALS.set(model, { normal });
+  return normal;
+}
+
+/**
+ * Eje local sobre el que se dibujan N y T (que actúan a lo largo de la barra
+ * y por eso se abaten). En modelos planos se usa el eje perpendicular a la
+ * barra contenido en el plano del modelo, para que el diagrama se vea en la
+ * vista del plano; en modelos 3D, el eje local z.
+ */
+export function axialPlotAxis(model: PymasModel, frame: FrameData): LocalAxis {
+  const normal = modelPlaneNormal(model);
+  if (!normal) return FORCE_PLOT_AXIS.fx;
+  const along = (axis: Vec3) =>
+    Math.abs(axis[0] * normal[0] + axis[1] * normal[1] + axis[2] * normal[2]);
+  return along(frame.localAxes.y) <= along(frame.localAxes.z) ? "y" : "z";
 }
 
 export function diagramAxis(component: DiagramComponent, kind = diagramKindOf(component)): LocalAxis {
@@ -257,7 +359,10 @@ export function buildFrameDiagram(
 
   const { p1, p2 } = framePositions(frame, model.nodes);
   const points = stations.map((station) => pointAtStation(p1, p2, station));
-  const axis = diagramAxis(component, kind);
+  const axis =
+    component === "fx" || component === "mx"
+      ? axialPlotAxis(model, frame)
+      : diagramAxis(component, kind);
   const axisVector = axisVectorOf(frame, axis);
   const offsets = values.map((value) => scale(axisVector, value * factor));
   const displayPoints = points.map((point, index) => add(point, offsets[index] ?? [0, 0, 0]));
@@ -360,7 +465,7 @@ export function sampleDiagram(series: DiagramSeries, station: number): DiagramSa
 }
 
 /**
- * Escala automática: la ordenada máxima de todos los esfuerzos considerados
+ * Escala automática: la ordenada máxima de todas las acciones internas consideradas
  * ocupa una fracción de la diagonal del modelo.  Devuelve 1 si no hay datos.
  */
 export function autoDiagramScale(

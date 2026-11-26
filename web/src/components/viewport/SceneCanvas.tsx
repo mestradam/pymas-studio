@@ -21,6 +21,7 @@ import FrameMesh from "./FrameMesh";
 import NodeMarkers from "./NodeMarkers";
 import ReleaseMarkers from "./ReleaseMarkers";
 import LoadVectors from "./LoadVectors";
+import type { LoadFactors } from "../../engine/loads";
 import DeformedStructure from "./DeformedStructure";
 import ForceDiagrams3D from "./ForceDiagrams3D";
 import ReactionVectors from "./ReactionVectors";
@@ -200,6 +201,19 @@ function ModelLayer({
   const loadArrowMode = useModelStore((state) => state.loadArrowMode);
   const heatmapMode = useModelStore((state) => state.heatmapMode);
   const activePatternId = useModelStore((state) => state.activePatternId);
+  // Cargas del caso activo: el patrón (factor 1) o la combinación con sus
+  // factores. Las envolventes no tienen un estado de carga único: se ocultan.
+  const resultMode = useModelStore((state) => state.resultMode);
+  const activeCombinationId = useModelStore((state) => state.activeCombinationId);
+  const loadFactors = useMemo<LoadFactors | null>(() => {
+    if (resultMode === "pattern") {
+      return activePatternId ? { [activePatternId]: 1 } : null;
+    }
+    if (resultMode === "combination" && activeCombinationId) {
+      return model.loadCombinations[activeCombinationId]?.factors ?? null;
+    }
+    return null;
+  }, [resultMode, activePatternId, activeCombinationId, model]);
   const showNodes = useModelStore((state) => state.showNodes);
   const showLabels = useModelStore((state) => state.showLabels);
   const showSupports = useModelStore((state) => state.showSupports);
@@ -208,20 +222,27 @@ function ModelLayer({
   const showDeformed = useModelStore((state) => state.showDeformed);
   const showForceDiagrams = useModelStore((state) => state.showForceDiagrams);
   const showReactions = useModelStore((state) => state.showReactions);
+  const deformedRenderMode = useModelStore((state) => state.deformedRenderMode);
+  // Con la deformada extruida el sólido original se oculta: su posición queda
+  // representada por la estructura fantasma.
+  const hideUndeformed =
+    !ghost && Boolean(result) && showDeformed && deformedRenderMode === "extruded";
 
   return (
     <group>
-      <FrameMesh
-        model={model}
-        result={result}
-        heatmapMode={heatmapMode}
-        renderMode={renderModeOverride ?? renderMode}
-        colorMode={colorMode}
-        opacity={opacityOverride ?? opacity}
-        sectionScale={sectionScale}
-        diagonal={bounds.diagonal}
-        colorForFrame={colorForFrame}
-      />
+      {!hideUndeformed && (
+        <FrameMesh
+          model={model}
+          result={result}
+          heatmapMode={heatmapMode}
+          renderMode={renderModeOverride ?? renderMode}
+          colorMode={colorMode}
+          opacity={opacityOverride ?? opacity}
+          sectionScale={sectionScale}
+          diagonal={bounds.diagonal}
+          colorForFrame={colorForFrame}
+        />
+      )}
       {!ghost && result && showDeformed && (
         <DeformedStructure
           model={model}
@@ -257,7 +278,7 @@ function ModelLayer({
       {!ghost && showLoads && (
         <LoadVectors
           model={model}
-          patternId={activePatternId}
+          factors={loadFactors}
           loadScale={loadScale}
           diagonal={bounds.diagonal}
           arrowMode={loadArrowMode}
