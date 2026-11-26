@@ -216,7 +216,7 @@ git push origin main develop --tags
 ```text
 pymas-studio/
 ├── LICENSE                    # Licencia MIT
-├── fixtures/                  # 12 exportaciones reales de pymas
+├── fixtures/                  # Exportaciones reales de pymas y volcados de proyecto
 ├── Makefile                   # Atajos: build, tests, estáticos y paquete Python
 ├── web/                       # React + TypeScript + Vite + Three.js
 │   ├── public/samples/        # Generado en cada build (no versionado)
@@ -252,10 +252,14 @@ pymas-studio/
 * Los vectores de carga se filtran por patrón activo y se autoescalan.
 * Casos de resultado: patrón exportado, combinación calculada en vivo y
   envolventes `ENV_MAX`/`ENV_MIN` sobre las combinaciones activas.
-* Deformada elástica por Hermite con escala automática/amplificable, estructura
-  fantasma, animación armónica y mapa de calor `|U|`, `ux`, `uy`, `uz` o deriva.
+* Deformada elástica por Hermite (en cerchas, cuerda recta entre nudos
+  desplazados) con escala automática/amplificable, estructura fantasma,
+  animación armónica y mapa de calor de resultados: `|U|`, `ux`, `uy`, `uz`,
+  deriva y los seis esfuerzos internos `N`, `Vy`, `Vz`, `T`, `My`, `Mz`.
 * Diagramas 3D de `Fx…Mz` en sus planos locales, con relleno por signo y
-  etiquetas en los extremos; reacciones en apoyos con `ΣFx`, `ΣFy`, `ΣFz`.
+  etiquetas en los extremos; reacciones en apoyos con `ΣFx`, `ΣFy`, `ΣFz`. El
+  mapa de calor de esfuerzos es complementario: colorea la estructura sin
+  reemplazar los diagramas clásicos.
 * **Selección interactiva** por clic sobre barras y nudos (modo alámbrico y
   extruido), con resaltado luminoso y cierre con `Esc` o clic en vacío.
 * **Inspector de elemento** en panel lateral: ficha técnica, liberaciones,
@@ -283,7 +287,7 @@ pymas-studio/
 * **Validación de diagramas**: `engine/diagrams.ts`, `engine/deformation.ts` y sus
   pruebas unitarias verifican estaciones, proyección en ejes locales, picos,
   convención de extremos, interpolación de Hermite, combinaciones lineales y
-  envolventes contra los 12 fixtures reales.
+  envolventes contra todos los fixtures reales.
 * **Inspector 2D y tablas de resultados** (Fase 4 del plan): completados con
   selección por raycasting, gráficos sincronizados con el marcador 3D, ficha de
   barras y nudos y tablas filtrables/ordenables.
