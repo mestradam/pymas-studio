@@ -4,13 +4,18 @@ import { useModelStore } from "../../store/useModelStore";
 import { buildLegend } from "../../engine/colors";
 import { patternLoadCount } from "../../engine/parser";
 import { autoDeformationScale } from "../../engine/deformation";
-import { autoDiagramScale, FORCE_COMPONENTS } from "../../engine/diagrams";
+import {
+  autoDiagramScale,
+  FORCE_COMPONENTS,
+  FORCE_LABELS,
+} from "../../engine/diagrams";
 import { formatNumber } from "../../engine/geometry";
 import {
   HEATMAP_GRADIENT,
   HEATMAP_LABELS,
   isForceHeatScalar,
   isMomentScalar,
+  isRotationScalar,
 } from "../../engine/heatmap";
 import { resultHeatRange } from "../../engine/resultHeatmap";
 import { UP_AXES, viewPlaneLabel } from "../../engine/upAxis";
@@ -37,26 +42,15 @@ const DEFORMATION_HEATMAP_OPTIONS = [
   ["ux", "ux"],
   ["uy", "uy"],
   ["uz", "uz"],
+  ["rx", "rx"],
+  ["ry", "ry"],
+  ["rz", "rz"],
   ["drift", "Deriva"],
 ] as const;
 
-const FORCE_HEATMAP_OPTIONS = [
-  ["fx", "N"],
-  ["fy", "Vy"],
-  ["fz", "Vz"],
-  ["mx", "T"],
-  ["my", "My"],
-  ["mz", "Mz"],
-] as const;
-
-const FORCE_COMPONENT_LABELS: Record<(typeof FORCE_COMPONENTS)[number], string> = {
-  fx: "Fx",
-  fy: "Fy",
-  fz: "Fz",
-  mx: "Mx",
-  my: "My",
-  mz: "Mz",
-};
+const FORCE_HEATMAP_OPTIONS = FORCE_COMPONENTS.map(
+  (component) => [component, FORCE_LABELS[component]] as const,
+);
 
 function Toggle({
   label,
@@ -97,10 +91,6 @@ export default function ControlSidebar({
   onClose: () => void;
 }) {
   const model = useModelStore((state) => state.model);
-  const sourceFile = useModelStore((state) => state.sourceFile);
-  const samples = useModelStore((state) => state.samples);
-  const loadingSamples = useModelStore((state) => state.loadingSamples);
-  const loadSample = useModelStore((state) => state.loadSample);
   const activePatternId = useModelStore((state) => state.activePatternId);
   const resultMode = useModelStore((state) => state.resultMode);
   const activeCombinationId = useModelStore((state) => state.activeCombinationId);
@@ -110,6 +100,10 @@ export default function ControlSidebar({
   const showDeformed = useModelStore((state) => state.showDeformed);
   const deformationScale = useModelStore((state) => state.deformationScale);
   const showGhost = useModelStore((state) => state.showGhost);
+  const deformedRenderMode = useModelStore((state) => state.deformedRenderMode);
+  const setDeformedRenderMode = useModelStore(
+    (state) => state.setDeformedRenderMode,
+  );
   const animateDeformation = useModelStore((state) => state.animateDeformation);
   const heatmapMode = useModelStore((state) => state.heatmapMode);
   const showForceDiagrams = useModelStore((state) => state.showForceDiagrams);
@@ -238,6 +232,7 @@ export default function ControlSidebar({
         ? `${units.force}·${units.length}`
         : units.force;
     }
+    if (isRotationScalar(heatmapMode)) return "rad";
     return units.length;
   })();
   const formatHeat = (value: number) =>
@@ -310,33 +305,6 @@ export default function ControlSidebar({
                   <span>{plural(model.stats.combinations, "combinación", "combinaciones")}</span>
                 </div>
               </div>
-            </section>
-
-            <section>
-              <h2 className="panel-title mb-1.5">Modelo de ejemplo</h2>
-              <select
-                className="h-8 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[11px] font-medium text-slate-200 outline-none transition hover:border-white/20 focus:border-sky-400/60"
-                value={sourceFile ?? ""}
-                disabled={loadingSamples}
-                onChange={(event) => {
-                  const entry = samples.find(
-                    (sample) => sample.file === event.target.value,
-                  );
-                  if (entry) void loadSample(entry);
-                }}
-                title="Cambiar de modelo de ejemplo"
-              >
-                <option value="" disabled>
-                  {sourceFile
-                    ? "Archivo local / URL"
-                    : "Modelo cargado desde URL"}
-                </option>
-                {samples.map((sample) => (
-                  <option key={sample.file} value={sample.file}>
-                    {sample.label}
-                  </option>
-                ))}
-              </select>
             </section>
 
             <section>
@@ -414,12 +382,37 @@ export default function ControlSidebar({
                 </div>
               )}
 
-              {resultMode === "pattern" && (
-                <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500">
-                  Usa el patrón seleccionado en la sección siguiente. El resultado
-                  se toma de los datos exportados.
-                </p>
-              )}
+              {resultMode === "pattern" &&
+                (model.loadPatternOrder.length > 0 ? (
+                  <div className="mt-1.5 space-y-1">
+                    <select
+                      className="h-7 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[10px] font-medium text-slate-200 outline-none transition hover:border-white/20 focus:border-sky-400/60"
+                      value={activePatternId ?? ""}
+                      onChange={(event) => setActivePattern(event.target.value)}
+                    >
+                      <option value="" disabled>
+                        Selecciona un patrón
+                      </option>
+                      {model.loadPatternOrder.map((id) => {
+                        const pattern = model.loadPatterns[id];
+                        if (!pattern) return null;
+                        return (
+                          <option key={id} value={id}>
+                            {pattern.name} · {patternLoadCount(pattern)} cargas
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <p className="text-[9px] leading-relaxed text-slate-500">
+                      Resultado tomado de los datos exportados. Los vectores de
+                      carga corresponden a este patrón.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 rounded-lg border border-white/[0.06] px-2 py-1.5 text-[10px] text-slate-500">
+                    El modelo no define patrones de carga.
+                  </div>
+                ))}
 
               {resultMode === "combination" && model.loadCombinationOrder.length > 0 && (
                 <div className="mt-1.5 space-y-1">
@@ -524,6 +517,27 @@ export default function ControlSidebar({
                   checked={showDeformed}
                   onChange={setShowDeformed}
                 />
+                <div className="seg my-1 w-full">
+                  {(
+                    [
+                      ["line", "Línea"],
+                      ["extruded", "Secciones extruidas"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      disabled={!showDeformed}
+                      className={cn(
+                        "seg-btn flex-1",
+                        deformedRenderMode === id && "seg-btn-active",
+                      )}
+                      onClick={() => setDeformedRenderMode(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <Toggle
                   label="Estructura fantasma"
                   checked={showGhost}
@@ -566,7 +580,7 @@ export default function ControlSidebar({
                 <div className="mt-1 text-[9px] uppercase tracking-wide text-slate-500">
                   Deformada
                 </div>
-                <div className="grid grid-cols-5 gap-1">
+                <div className="grid grid-cols-4 gap-1">
                   {DEFORMATION_HEATMAP_OPTIONS.map(([mode, label]) => (
                     <button
                       key={mode}
@@ -582,7 +596,7 @@ export default function ControlSidebar({
                   ))}
                 </div>
                 <div className="mt-1.5 text-[9px] uppercase tracking-wide text-slate-500">
-                  Esfuerzos internos
+                  Acciones internas
                 </div>
                 <div className="grid grid-cols-3 gap-1">
                   {FORCE_HEATMAP_OPTIONS.map(([mode, label]) => (
@@ -628,7 +642,7 @@ export default function ControlSidebar({
 
             <section>
               <div className="mb-1.5 flex items-center justify-between">
-                <h2 className="panel-title">Diagramas de esfuerzos</h2>
+                <h2 className="panel-title">Diagramas de acciones internas</h2>
                 <span className="font-mono text-[10px] text-slate-500">
                   {formatNumber(autoDiagramFactor * diagramScale)}×
                 </span>
@@ -656,7 +670,7 @@ export default function ControlSidebar({
                     )}
                     onClick={() => toggleDiagramComponent(component)}
                   >
-                    {FORCE_COMPONENT_LABELS[component]}
+                    {FORCE_LABELS[component]}
                   </button>
                 ))}
               </div>
@@ -682,87 +696,6 @@ export default function ControlSidebar({
                   disabled={!showForceDiagrams}
                   onChange={(event) => setDiagramScale(Number(event.target.value))}
                 />
-              </div>
-            </section>
-
-            <section>
-              <div className="mb-1.5 flex items-center justify-between">
-                <h2 className="panel-title">Patrón de cargas</h2>
-                <span className="text-[10px] text-slate-500">filtra los vectores</span>
-              </div>
-              <div className="space-y-1">
-                <button
-                  type="button"
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-lg border px-2 py-1.5 text-left text-[11px] transition",
-                    activePatternId === null
-                      ? "border-sky-400/40 bg-sky-400/10 text-sky-100"
-                      : "border-white/[0.06] bg-white/[0.02] text-slate-400 hover:bg-white/[0.05]",
-                  )}
-                  onClick={() => setActivePattern(null)}
-                >
-                  <span>Ocultar cargas</span>
-                  <span className="font-mono text-[10px]">—</span>
-                </button>
-                {model.loadPatternOrder.map((id) => {
-                  const pattern = model.loadPatterns[id];
-                  if (!pattern) return null;
-                  const active = activePatternId === id;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      className={cn(
-                        "flex w-full items-center justify-between gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] transition",
-                        active
-                          ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
-                          : "border-white/[0.06] bg-white/[0.02] text-slate-300 hover:bg-white/[0.05]",
-                      )}
-                      onClick={() => setActivePattern(id)}
-                      title={pattern.name}
-                    >
-                      <span className="truncate">{pattern.name}</span>
-                      <span className="shrink-0 font-mono text-[10px] text-slate-500">
-                        {patternLoadCount(pattern)} cargas
-                      </span>
-                    </button>
-                  );
-                })}
-                {model.loadPatternOrder.length === 0 && (
-                  <div className="rounded-lg border border-white/[0.06] px-2 py-2 text-[11px] text-slate-500">
-                    El modelo no define patrones de carga.
-                  </div>
-                )}
-              </div>
-              <div className="mt-2">
-                <h3 className="panel-title mb-1.5">Dirección de flechas</h3>
-                <div className="space-y-1">
-                  {(
-                    [
-                      ["tip", "Punta en el elemento", "hacia adentro"],
-                      ["origin", "Origen en el elemento", "hacia afuera"],
-                    ] as const
-                  ).map(([id, label, hint]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className={cn(
-                        "flex w-full items-center justify-between gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] transition",
-                        loadArrowMode === id
-                          ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
-                          : "border-white/[0.06] bg-white/[0.02] text-slate-300 hover:bg-white/[0.05]",
-                      )}
-                      onClick={() => setLoadArrowMode(id)}
-                      title={`${label} (${hint})`}
-                      disabled={!showLoads}
-                    >
-                      <span className="truncate">{label}</span>
-                      <span className="shrink-0 text-[9px] uppercase tracking-wide text-slate-500">
-                        {hint}
-                      </span>
-                    </button>
-                  ))}
-                </div>
               </div>
             </section>
 
@@ -909,6 +842,28 @@ export default function ControlSidebar({
                   checked={showLoads}
                   onChange={setShowLoads}
                 />
+                {showLoads && (
+                  <div className="seg mx-1 mb-1 w-[calc(100%-0.5rem)]">
+                    {(
+                      [
+                        ["tip", "Punta en el elemento"],
+                        ["origin", "Origen en el elemento"],
+                      ] as const
+                    ).map(([id, label]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className={cn(
+                          "seg-btn flex-1 px-0 text-[9px]",
+                          loadArrowMode === id && "seg-btn-active",
+                        )}
+                        onClick={() => setLoadArrowMode(id)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <Toggle
                   label="Reacciones en apoyos"
                   checked={showReactions}

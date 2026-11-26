@@ -1,5 +1,6 @@
 import {
   Box,
+  ChevronDown,
   GitCompareArrows,
   Loader2,
   Maximize2,
@@ -103,10 +104,16 @@ export default function TopToolbar({
             </option>
           ))}
         </select>
-        {loadingSamples && (
+        {loadingSamples ? (
           <Loader2
             size={12}
             className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-slate-400"
+          />
+        ) : (
+          <ChevronDown
+            size={14}
+            aria-hidden
+            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
           />
         )}
       </div>

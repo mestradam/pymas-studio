@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { Html } from "@react-three/drei";
 import { useModelStore } from "../../store/useModelStore";
 import type { PymasModel } from "../../types/pymas";
 import {
@@ -7,11 +6,7 @@ import {
   buildDeformedFrame,
   deformedPointAt,
 } from "../../engine/deformation";
-import { formatNumber, framePositions, pointAtStation } from "../../engine/geometry";
-import {
-  buildFrameChartSeries,
-  interpolateSeriesAt,
-} from "../../engine/inspection";
+import { framePositions, pointAtStation } from "../../engine/geometry";
 
 interface ChartCursorMarkerProps {
   model: PymasModel;
@@ -22,7 +17,8 @@ interface ChartCursorMarkerProps {
  * Marcador 3D sincronizado con el cursor de los gráficos 2D.
  *
  * Sigue la curva deformada cuando la deformada está activa y la barra
- * seleccionada; en caso contrario se apoya en la recta indeformada.
+ * seleccionada; en caso contrario se apoya en la recta indeformada. Los
+ * valores se leen en `ChartCursorReadout`, fijo junto al inspector.
  */
 export default function ChartCursorMarker({
   model,
@@ -73,11 +69,6 @@ export default function ChartCursorMarker({
     deformationFactor,
   ]);
 
-  const series = useMemo(() => {
-    if (!computedResult || !selectedFrameId || !frameResult) return null;
-    return buildFrameChartSeries(computedResult, selectedFrameId);
-  }, [computedResult, selectedFrameId, frameResult]);
-
   const position = useMemo(() => {
     if (!frame || chartStation === null) return null;
     if (deformedCurve) return deformedPointAt(deformedCurve, chartStation);
@@ -86,14 +77,6 @@ export default function ChartCursorMarker({
   }, [frame, chartStation, deformedCurve, model.nodes]);
 
   if (!frame || position === null || chartStation === null) return null;
-
-  const length = Math.max(frame.length, 1e-9);
-  const values =
-    series?.map((entry) => ({
-      key: entry.key,
-      label: entry.label.split(" · ")[0],
-      value: interpolateSeriesAt(entry.stations, entry.values, chartStation),
-    })) ?? [];
 
   const markerRadius = Math.max(diagonal * 0.009, 1e-5);
 
@@ -119,31 +102,6 @@ export default function ChartCursorMarker({
           depthWrite={false}
         />
       </mesh>
-      <Html
-        position={[0, markerRadius * 2.4, 0]}
-        center
-        zIndexRange={[50, 0]}
-        className="pointer-events-none select-none"
-      >
-        <div className="w-[178px] rounded-md border border-orange-300/40 bg-slate-950/92 px-1.5 py-1 shadow-xl">
-          <div className="mb-0.5 flex items-baseline justify-between gap-2 font-mono text-[8px] text-orange-200">
-            <span>
-              x = {formatNumber(chartStation * length)} {model.meta.units.length}
-            </span>
-            <span className="text-slate-500">ξ {chartStation.toFixed(2)}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-x-2 gap-y-[1px] font-mono text-[8px] leading-tight">
-            {values.map((entry) => (
-              <div key={entry.key} className="flex justify-between gap-1">
-                <span className="text-slate-500">{entry.label}</span>
-                <span className="tabular-nums text-slate-100">
-                  {formatNumber(entry.value)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Html>
     </group>
   );
 }
