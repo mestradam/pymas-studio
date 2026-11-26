@@ -3,13 +3,16 @@ import { Info, Layers, X } from "lucide-react";
 import { useModelStore } from "../../store/useModelStore";
 import { buildLegend } from "../../engine/colors";
 import { patternLoadCount } from "../../engine/parser";
-import {
-  autoDeformationScale,
-  deformationHeatRange,
-} from "../../engine/deformation";
+import { autoDeformationScale } from "../../engine/deformation";
 import { autoDiagramScale, FORCE_COMPONENTS } from "../../engine/diagrams";
 import { formatNumber } from "../../engine/geometry";
-import { HEATMAP_GRADIENT } from "../../engine/heatmap";
+import {
+  HEATMAP_GRADIENT,
+  HEATMAP_LABELS,
+  isForceHeatScalar,
+  isMomentScalar,
+} from "../../engine/heatmap";
+import { resultHeatRange } from "../../engine/resultHeatmap";
 import { UP_AXES, viewPlaneLabel } from "../../engine/upAxis";
 import { cn } from "../../lib/utils";
 
@@ -29,13 +32,21 @@ const RESULT_MODE_OPTIONS = [
   ["env_min", "ENV MIN"],
 ] as const;
 
-const HEATMAP_OPTIONS = [
+const DEFORMATION_HEATMAP_OPTIONS = [
   ["magnitude", "|U|"],
   ["ux", "ux"],
   ["uy", "uy"],
   ["uz", "uz"],
   ["drift", "Deriva"],
-  ["none", "Plano"],
+] as const;
+
+const FORCE_HEATMAP_OPTIONS = [
+  ["fx", "N"],
+  ["fy", "Vy"],
+  ["fz", "Vz"],
+  ["mx", "T"],
+  ["my", "My"],
+  ["mz", "Mz"],
 ] as const;
 
 const FORCE_COMPONENT_LABELS: Record<(typeof FORCE_COMPONENTS)[number], string> = {
@@ -189,7 +200,7 @@ export default function ControlSidebar({
   const heatRange = useMemo(() => {
     if (!model || !computedResult || heatmapMode === "none") return null;
     try {
-      return deformationHeatRange(model, computedResult, heatmapMode, upAxis);
+      return resultHeatRange(model, computedResult, heatmapMode, upAxis);
     } catch {
       return null;
     }
@@ -219,11 +230,20 @@ export default function ControlSidebar({
     activeCombinationIds,
   ]);
 
-  const heatUnit = model?.meta.units.length ?? "m";
+  const heatUnit = (() => {
+    const units = model?.meta.units;
+    if (!units) return "";
+    if (isForceHeatScalar(heatmapMode)) {
+      return isMomentScalar(heatmapMode)
+        ? `${units.force}·${units.length}`
+        : units.force;
+    }
+    return units.length;
+  })();
   const formatHeat = (value: number) =>
     heatmapMode === "drift"
       ? `${(value * 100).toFixed(3)} %`
-      : `${formatNumber(value)} ${heatUnit}`;
+      : `${formatNumber(value)} ${heatUnit}`.trim();
 
   const plural = (count: number, one: string, many: string) =>
     `${count} ${count === 1 ? one : many}`;
@@ -541,9 +561,13 @@ export default function ControlSidebar({
               <div className="mt-2">
                 <div className="field-label">
                   <span>Mapa de calor</span>
+                  <span className="field-value">{HEATMAP_LABELS[heatmapMode]}</span>
                 </div>
-                <div className="grid grid-cols-3 gap-1">
-                  {HEATMAP_OPTIONS.map(([mode, label]) => (
+                <div className="mt-1 text-[9px] uppercase tracking-wide text-slate-500">
+                  Deformada
+                </div>
+                <div className="grid grid-cols-5 gap-1">
+                  {DEFORMATION_HEATMAP_OPTIONS.map(([mode, label]) => (
                     <button
                       key={mode}
                       type="button"
@@ -556,6 +580,36 @@ export default function ControlSidebar({
                       {label}
                     </button>
                   ))}
+                </div>
+                <div className="mt-1.5 text-[9px] uppercase tracking-wide text-slate-500">
+                  Esfuerzos internos
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  {FORCE_HEATMAP_OPTIONS.map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={cn(
+                        "btn px-0 py-1 text-[10px]",
+                        heatmapMode === mode && "btn-active",
+                      )}
+                      onClick={() => setHeatmapMode(mode)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-1.5 grid grid-cols-3 gap-1">
+                  <button
+                    type="button"
+                    className={cn(
+                      "btn col-span-3 px-0 py-1 text-[10px]",
+                      heatmapMode === "none" && "btn-active",
+                    )}
+                    onClick={() => setHeatmapMode("none")}
+                  >
+                    Plano
+                  </button>
                 </div>
                 {heatmapMode !== "none" && heatRange && (
                   <div className="mt-1.5">
