@@ -5,6 +5,7 @@ import type { PatternResultData, PymasModel } from "../../types/pymas";
 import {
   autoDiagramScale,
   buildFrameDiagram,
+  FORCE_LABELS,
   type DiagramPeak,
   type DiagramSeries,
   type ForceComponent,
@@ -23,15 +24,6 @@ const NEGATIVE: [number, number, number] = [0.98, 0.45, 0.52];
 const POSITIVE_LIGHT: [number, number, number] = [0.02, 0.32, 0.42];
 const NEGATIVE_LIGHT: [number, number, number] = [0.72, 0.06, 0.19];
 
-const COMPONENT_LABELS: Record<ForceComponent, string> = {
-  fx: "Fx",
-  fy: "Fy",
-  fz: "Fz",
-  mx: "Mx",
-  my: "My",
-  mz: "Mz",
-};
-
 function signColor(
   value: number,
   light: boolean,
@@ -48,8 +40,8 @@ interface ExtremeLabel {
 }
 
 /**
- * Diagramas 3D de esfuerzos internos. Cada componente se dibuja sobre el eje
- * local que le corresponde (`fx/mx → x`, `fy/mz → y`, `fz/my → z`) con relleno
+ * Diagramas 3D de acciones internas. Cada componente se dibuja sobre el eje
+ * local que le corresponde (`fy/mz → y`; `fx/fz/mx/my → z`) con relleno
  * semitransparente, color por signo y etiquetas en los extremos globales.
  */
 export default function ForceDiagrams3D({
@@ -250,7 +242,7 @@ export default function ForceDiagrams3D({
                   backgroundColor: "var(--label-bg)",
                 }}
               >
-                {COMPONENT_LABELS[label.component]} {formatNumber(label.value)} {unit}
+                {FORCE_LABELS[label.component]} {formatNumber(label.value)} {unit}
               </div>
             </Html>
           );

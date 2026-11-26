@@ -89,6 +89,10 @@ export interface DeformedFrameCurve {
   localDisplacements: Vec3[];
   /** Desplazamientos globales (local -> global con los ejes de la barra). */
   globalDisplacements: Vec3[];
+  /** Giros locales (rx, ry, rz) interpolados linealmente, en rad. */
+  localRotations: Vec3[];
+  /** Giros globales (local -> global con los ejes de la barra), en rad. */
+  globalRotations: Vec3[];
   deformedPoints: Vec3[];
   isVertical: boolean;
   maxMagnitude: number;
@@ -296,6 +300,82 @@ function densifyStations(sourceStations: number[], subdivisions: number): number
   return outStations;
 }
 
+/**
+ * Interpolación lineal por tramos de vectores definidos en `sourceStations`
+ * hacia `targetStations`. Fuera del rango se repite el extremo más cercano.
+ */
+export function interpolateLinearVectors(
+  sourceStations: number[],
+  values: Vec3[],
+  targetStations: number[],
+): Vec3[] {
+  const count = Math.min(sourceStations.length, values.length);
+  if (count === 0) return targetStations.map(() => [0, 0, 0]);
+  if (count === 1) {
+    const only = values[0] ?? [0, 0, 0];
+    return targetStations.map(() => [...only]);
+  }
+  return targetStations.map((station) => {
+    const first = sourceStations[0] ?? 0;
+    if (station <= first) return [...(values[0] ?? [0, 0, 0])];
+    for (let index = 0; index < count - 1; index += 1) {
+      const x0 = sourceStations[index] ?? 0;
+      const x1 = sourceStations[index + 1] ?? 1;
+      if (station <= x1) {
+        const v0 = values[index] ?? [0, 0, 0];
+        const v1 = values[index + 1] ?? [0, 0, 0];
+        const t = x1 - x0 > 1e-15 ? (station - x0) / (x1 - x0) : 1;
+        return [
+          v0[0] + (v1[0] - v0[0]) * t,
+          v0[1] + (v1[1] - v0[1]) * t,
+          v0[2] + (v1[2] - v0[2]) * t,
+        ];
+      }
+    }
+    return [...(values[count - 1] ?? [0, 0, 0])];
+  });
+}
+
+function nodalRotation(result: PatternResultData, nodeId: string): Vec3 | undefined {
+  const displacement = result.nodalDisplacements[nodeId];
+  if (!displacement) return undefined;
+  return [displacement.rx, displacement.ry, displacement.rz];
+}
+
+/**
+ * Giros globales en las estaciones dadas. En celosías se interpolan los giros
+ * nodales (normalmente nulos); en barras de pórtico se interpolan linealmente
+ * los giros locales exportados y se transforman a global.
+ */
+function frameRotations(
+  model: PymasModel,
+  result: PatternResultData,
+  frame: FrameData,
+  sourceStations: number[],
+  targetStations: number[],
+): { local: Vec3[]; global: Vec3[] } {
+  if (isTrussFrame(model, frame)) {
+    const rI = nodalRotation(result, frame.nodeI) ?? [0, 0, 0];
+    const rJ = nodalRotation(result, frame.nodeJ) ?? [0, 0, 0];
+    const global = interpolateLinearVectors([0, 1], [rI, rJ], targetStations);
+    return {
+      global,
+      local: global.map((value) => globalToLocal(value, frame.localAxes)),
+    };
+  }
+  const series = result.frameResults[frame.id]?.internalDisplacements;
+  const sourceValues: Vec3[] = sourceStations.map((_, index) => [
+    series ? seriesAt(series.rx, index) : 0,
+    series ? seriesAt(series.ry, index) : 0,
+    series ? seriesAt(series.rz, index) : 0,
+  ]);
+  const local = interpolateLinearVectors(sourceStations, sourceValues, targetStations);
+  return {
+    local,
+    global: local.map((value) => localToGlobal(value, frame.localAxes)),
+  };
+}
+
 function nodalDisplacement(result: PatternResultData, nodeId: string): Vec3 | undefined {
   const displacement = result.nodalDisplacements[nodeId];
   if (!displacement) return undefined;
@@ -372,6 +452,8 @@ export function buildDeformedFrame(
     );
   }
 
+  const rotations = frameRotations(model, result, frame, sourceStations, stations);
+
   const undeformedPoints = stations.map((station) => pointAtStation(p1, p2, station));
   const deformedPoints = undeformedPoints.map((point, index) =>
     add(point, scale(globalDisplacements[index] ?? [0, 0, 0], factor)),
@@ -386,6 +468,9 @@ export function buildDeformedFrame(
   const uy: number[] = [];
   const uz: number[] = [];
   const drift: number[] = [];
+  const rx = rotations.global.map((value) => value[0]);
+  const ry = rotations.global.map((value) => value[1]);
+  const rz = rotations.global.map((value) => value[2]);
 
   for (let index = 0; index < globalDisplacements.length; index += 1) {
     const displacement = globalDisplacements[index] ?? [0, 0, 0];
@@ -406,10 +491,12 @@ export function buildDeformedFrame(
     undeformedPoints,
     localDisplacements,
     globalDisplacements,
+    localRotations: rotations.local,
+    globalRotations: rotations.global,
     deformedPoints,
     isVertical,
     maxMagnitude: magnitude.reduce((max, value) => Math.max(max, value), 0),
-    heat: { magnitude, ux, uy, uz, drift },
+    heat: { magnitude, ux, uy, uz, rx, ry, rz, drift },
   };
 }
 
@@ -469,6 +556,10 @@ export function deformationHeatRange(
         ),
       );
     const baseDisplacement = displacements[0] ?? [0, 0, 0];
+    const rotations =
+      scalar === "rx" || scalar === "ry" || scalar === "rz"
+        ? frameRotations(model, result, frame, stations, stations).global
+        : null;
 
     for (let index = 0; index < stations.length; index += 1) {
       const displacement = displacements[index] ?? [0, 0, 0];
@@ -484,6 +575,15 @@ export function deformationHeatRange(
           break;
         case "uz":
           values.push(displacement[2]);
+          break;
+        case "rx":
+          values.push(rotations?.[index]?.[0] ?? 0);
+          break;
+        case "ry":
+          values.push(rotations?.[index]?.[1] ?? 0);
+          break;
+        case "rz":
+          values.push(rotations?.[index]?.[2] ?? 0);
           break;
         case "drift": {
           const point = pointAtStation(p1, p2, stations[index] ?? 0);

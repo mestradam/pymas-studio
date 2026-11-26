@@ -73,14 +73,14 @@ describe("inspector · resumen de fuerzas por barra", () => {
 });
 
 describe("inspector · series de gráficos 2D", () => {
-  it("genera las siete series con estaciones y deflexión local", () => {
+  it("genera las seis acciones internas y los seis movimientos globales", () => {
     const { model } = loadFixture("space_frame.json");
     const result = firstResult(model);
 
     for (const frameId of model.frameOrder) {
       const frameResult = result.frameResults[frameId];
       if (!frameResult) continue;
-      const series = buildFrameChartSeries(result, frameId);
+      const series = buildFrameChartSeries(model, result, frameId);
       expect(series).not.toBeNull();
       if (!series) continue;
       expect(series.map((entry) => entry.key)).toEqual([...FRAME_CHART_ORDER]);
@@ -91,23 +91,26 @@ describe("inspector · series de gráficos 2D", () => {
         expect(entry.values).toEqual(raw);
       }
 
-      const deflection = series[6];
-      expect(deflection).toBeDefined();
-      if (!deflection) continue;
-      expect(deflection.stations).toEqual(
-        frameResult.internalDisplacements.stations,
-      );
-      expect(deflection.values).toHaveLength(
-        frameResult.internalDisplacements.stations.length,
-      );
-      for (let index = 0; index < deflection.values.length; index += 1) {
-        expect(deflection.values[index]).toBeCloseTo(
-          Math.hypot(
-            frameResult.internalDisplacements.uy[index] ?? 0,
-            frameResult.internalDisplacements.uz[index] ?? 0,
-          ),
-          12,
-        );
+      // En los extremos los movimientos coinciden con los desplazamientos
+      // nodales globales.
+      const frame = model.frames[frameId]!;
+      const nodeI = result.nodalDisplacements[frame.nodeI];
+      const nodeJ = result.nodalDisplacements[frame.nodeJ];
+      const movements = series.slice(6);
+      expect(movements.map((entry) => entry.family)).toEqual([
+        "displacement",
+        "displacement",
+        "displacement",
+        "rotation",
+        "rotation",
+        "rotation",
+      ]);
+      for (const entry of movements) {
+        const key = entry.key as "ux";
+        if (nodeI) expect(entry.values[0]).toBeCloseTo(nodeI[key], 8);
+        if (nodeJ) {
+          expect(entry.values[entry.values.length - 1]).toBeCloseTo(nodeJ[key], 8);
+        }
       }
     }
   });
@@ -116,7 +119,7 @@ describe("inspector · series de gráficos 2D", () => {
     const { model } = loadFixture("F3_analisis_reparacion.json");
     const result = firstResult(model);
     for (const frameId of model.frameOrder) {
-      const series = buildFrameChartSeries(result, frameId);
+      const series = buildFrameChartSeries(model, result, frameId);
       if (!series) continue;
       for (const entry of series) {
         expect(entry.stations.every(Number.isFinite)).toBe(true);
@@ -152,7 +155,7 @@ describe("inspector · interpolación de series", () => {
     const { model } = loadFixture("space_frame.json");
     const result = firstResult(model);
     const frameId = model.frameOrder[0] ?? "";
-    const series = buildFrameChartSeries(result, frameId);
+    const series = buildFrameChartSeries(model, result, frameId);
     expect(series).not.toBeNull();
     if (!series) return;
     const fx = series[0];

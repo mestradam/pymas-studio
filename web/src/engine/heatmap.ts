@@ -2,14 +2,23 @@
  * Catálogo de magnitudes coloreables sobre la estructura.
  *
  * Se distinguen dos familias:
- *  - `DeformationScalar`: desplazamientos globales de la deformada y deriva.
- *  - `ForceHeatScalar`: los seis esfuerzos internos locales de pymas
+ *  - `DeformationScalar`: desplazamientos y giros globales de la deformada y
+ *    deriva.
+ *  - `ForceHeatScalar`: las seis acciones internas locales de pymas
  *    (`fx`…`mz`), que también alimentan los diagramas clásicos.
  *
  * El mapa de color es sólo otra forma de leer el mismo resultado: no reemplaza
- * los diagramas de esfuerzos, que siguen dibujándose como ordenadas 3D.
+ * los diagramas de acciones internas, que siguen dibujándose como ordenadas 3D.
  */
-export type DeformationScalar = "magnitude" | "ux" | "uy" | "uz" | "drift";
+export type DeformationScalar =
+  | "magnitude"
+  | "ux"
+  | "uy"
+  | "uz"
+  | "rx"
+  | "ry"
+  | "rz"
+  | "drift";
 export type ForceHeatScalar = "fx" | "fy" | "fz" | "mx" | "my" | "mz";
 export type HeatmapScalar = DeformationScalar | ForceHeatScalar;
 export type HeatmapMode = "none" | HeatmapScalar;
@@ -19,6 +28,9 @@ export const DEFORMATION_HEAT_SCALARS = [
   "ux",
   "uy",
   "uz",
+  "rx",
+  "ry",
+  "rz",
   "drift",
 ] as const satisfies readonly DeformationScalar[];
 
@@ -38,6 +50,9 @@ export const HEATMAP_LABELS: Record<HeatmapMode, string> = {
   ux: "ux",
   uy: "uy",
   uz: "uz",
+  rx: "rx",
+  ry: "ry",
+  rz: "rz",
   drift: "Deriva",
   fx: "N",
   fy: "Vy",
@@ -55,6 +70,11 @@ export function isDeformationScalar(
 
 export function isForceHeatScalar(mode: HeatmapMode): mode is ForceHeatScalar {
   return (FORCE_HEAT_SCALARS as readonly string[]).includes(mode);
+}
+
+/** `true` para los giros globales (`rx`, `ry`, `rz`), expresados en rad. */
+export function isRotationScalar(mode: HeatmapMode): boolean {
+  return mode === "rx" || mode === "ry" || mode === "rz";
 }
 
 /** `true` para los momentos (`mx`, `my`, `mz`), cuya unidad es fuerza·longitud. */

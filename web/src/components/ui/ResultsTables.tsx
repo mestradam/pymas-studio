@@ -712,10 +712,10 @@ export default function ResultsTables() {
                   />
                   {(
                     [
-                      ["axial", "|Fx|"],
-                      ["shearY", "|Fy|"],
-                      ["shearZ", "|Fz|"],
-                      ["torsion", "|Mx|"],
+                      ["axial", "|N|"],
+                      ["shearY", "|Vy|"],
+                      ["shearZ", "|Vz|"],
+                      ["torsion", "|T|"],
                       ["momentY", "|My|"],
                       ["momentZ", "|Mz|"],
                       ["maxForce", "|F| máx"],
