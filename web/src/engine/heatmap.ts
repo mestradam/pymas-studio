@@ -1,6 +1,66 @@
-/** Modos de coloreado de la deformada. */
-export type HeatmapScalar = "magnitude" | "ux" | "uy" | "uz" | "drift";
+/**
+ * Catálogo de magnitudes coloreables sobre la estructura.
+ *
+ * Se distinguen dos familias:
+ *  - `DeformationScalar`: desplazamientos globales de la deformada y deriva.
+ *  - `ForceHeatScalar`: los seis esfuerzos internos locales de pymas
+ *    (`fx`…`mz`), que también alimentan los diagramas clásicos.
+ *
+ * El mapa de color es sólo otra forma de leer el mismo resultado: no reemplaza
+ * los diagramas de esfuerzos, que siguen dibujándose como ordenadas 3D.
+ */
+export type DeformationScalar = "magnitude" | "ux" | "uy" | "uz" | "drift";
+export type ForceHeatScalar = "fx" | "fy" | "fz" | "mx" | "my" | "mz";
+export type HeatmapScalar = DeformationScalar | ForceHeatScalar;
 export type HeatmapMode = "none" | HeatmapScalar;
+
+export const DEFORMATION_HEAT_SCALARS = [
+  "magnitude",
+  "ux",
+  "uy",
+  "uz",
+  "drift",
+] as const satisfies readonly DeformationScalar[];
+
+export const FORCE_HEAT_SCALARS = [
+  "fx",
+  "fy",
+  "fz",
+  "mx",
+  "my",
+  "mz",
+] as const satisfies readonly ForceHeatScalar[];
+
+/** Etiquetas cortas para la barra lateral y la leyenda. */
+export const HEATMAP_LABELS: Record<HeatmapMode, string> = {
+  none: "Plano",
+  magnitude: "|U|",
+  ux: "ux",
+  uy: "uy",
+  uz: "uz",
+  drift: "Deriva",
+  fx: "N",
+  fy: "Vy",
+  fz: "Vz",
+  mx: "T",
+  my: "My",
+  mz: "Mz",
+};
+
+export function isDeformationScalar(
+  mode: HeatmapMode,
+): mode is DeformationScalar {
+  return (DEFORMATION_HEAT_SCALARS as readonly string[]).includes(mode);
+}
+
+export function isForceHeatScalar(mode: HeatmapMode): mode is ForceHeatScalar {
+  return (FORCE_HEAT_SCALARS as readonly string[]).includes(mode);
+}
+
+/** `true` para los momentos (`mx`, `my`, `mz`), cuya unidad es fuerza·longitud. */
+export function isMomentScalar(mode: HeatmapMode): boolean {
+  return mode === "mx" || mode === "my" || mode === "mz";
+}
 
 interface ColorStop {
   at: number;

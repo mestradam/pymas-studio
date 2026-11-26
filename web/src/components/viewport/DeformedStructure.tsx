@@ -7,7 +7,7 @@ import {
   buildDeformation,
   deformationHeatRange,
 } from "../../engine/deformation";
-import { heatmapColor } from "../../engine/heatmap";
+import { heatmapColor, isDeformationScalar } from "../../engine/heatmap";
 import { framePositions } from "../../engine/geometry";
 import { useModelStore } from "../../store/useModelStore";
 import { useThemeStore } from "../../store/useThemeStore";
@@ -22,7 +22,8 @@ const FALLBACK_COLOR: [number, number, number] = [0.25, 0.76, 0.98];
 const FALLBACK_COLOR_LIGHT: [number, number, number] = [0.05, 0.42, 0.55];
 
 /**
- * Curva deformada de cada barra (Hermite sobre `internal_displacements`).
+ * Curva deformada de cada barra (Hermite sobre `internal_displacements`; en
+ * cerchas, cuerda recta entre los nudos desplazados).
  *
  * La geometría se fusiona en un único `LineSegments` con colores por vértice
  * para dibujar cientos de barras sin crear un objeto por barra. La animación
@@ -51,18 +52,24 @@ export default function DeformedStructure({
       subdivisions: 8,
       upAxis,
     });
+    // Los esfuerzos se colorean en la malla sólida; la línea deformada sólo se
+    // tiñe con magnitudes de desplazamiento.
+    const deformationScalar = isDeformationScalar(heatmapMode)
+      ? heatmapMode
+      : null;
     const range =
-      heatmapMode === "none"
+      deformationScalar === null
         ? { min: 0, max: 0 }
-        : deformationHeatRange(model, result, heatmapMode, upAxis);
-    return { deformation, factor, autoScale, range };
+        : deformationHeatRange(model, result, deformationScalar, upAxis);
+    return { deformation, factor, autoScale, range, deformationScalar };
   }, [model, result, deformationScale, heatmapMode, upAxis]);
 
   const scene = useMemo(() => {
     const base: number[] = [];
     const displacement: number[] = [];
     const colors: number[] = [];
-    const hasRange = heatmapMode !== "none" && data.range.max - data.range.min > 1e-15;
+    const hasRange =
+      data.deformationScalar !== null && data.range.max - data.range.min > 1e-15;
 
     for (const curve of data.deformation.frames) {
       const points = curve.stations.length;
@@ -74,8 +81,8 @@ export default function DeformedStructure({
           displacement.push(offset[0], offset[1], offset[2]);
 
           let color = light ? FALLBACK_COLOR_LIGHT : FALLBACK_COLOR;
-          if (hasRange) {
-            const value = curve.heat[heatmapMode][vertex] ?? 0;
+          if (hasRange && data.deformationScalar) {
+            const value = curve.heat[data.deformationScalar][vertex] ?? 0;
             color = heatmapColor(value, data.range.min, data.range.max);
           }
           colors.push(color[0], color[1], color[2]);
@@ -114,7 +121,7 @@ export default function DeformedStructure({
       geometry,
       material,
     };
-  }, [data, heatmapMode, light]);
+  }, [data, light]);
 
   const ghost = useMemo(() => {
     const positions: number[] = [];

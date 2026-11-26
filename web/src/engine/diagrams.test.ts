@@ -86,7 +86,9 @@ function expectSeriesFinite(series: DiagramSeries): void {
 
 describe("diagramas · geometría contra fixtures", () => {
   for (const fixture of fixtures) {
-    it(`${fixture.file}: estaciones, puntos y ordenadas sobre ejes locales`, () => {
+    // F2_analisis_actual.json es un volcado de proyecto sin bloque `results`.
+    const hasResults = Object.keys(fixture.model.results).length > 0;
+    it.skipIf(!hasResults)(`${fixture.file}: estaciones, puntos y ordenadas sobre ejes locales`, () => {
       const { model } = fixture;
       let checked = 0;
 
@@ -171,7 +173,8 @@ describe("diagramas · geometría contra fixtures", () => {
 
 describe("diagramas · anclajes de extremo", () => {
   for (const fixture of fixtures) {
-    it(`${fixture.file}: los extremos coinciden con end_actions (convención pymas)`, () => {
+    const hasResults = Object.keys(fixture.model.results).length > 0;
+    it.skipIf(!hasResults)(`${fixture.file}: los extremos coinciden con end_actions (convención pymas)`, () => {
       const { model } = fixture;
       const mismatches: string[] = [];
       let checked = 0;
