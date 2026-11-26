@@ -141,14 +141,9 @@ describe("parser · auditoría de todos los fixtures", () => {
             expect(internalDisplacements.stations.length).toBe(
               internalDisplacements.rz.length,
             );
-            if (fixture.file === "F3_analisis_reparacion.json") {
-              expect(internalForces.hasExplicitStations).toBe(false);
-              expect(internalForces.stations).toEqual([0, 0.25, 0.5, 0.75, 1]);
-            } else {
-              expect(internalForces.hasExplicitStations).toBe(true);
-              expect(internalForces.stations[0]).toBe(0);
-              expect(internalForces.stations[internalForces.stations.length - 1]).toBe(1);
-            }
+            expect(internalForces.hasExplicitStations).toBe(true);
+            expect(internalForces.stations[0]).toBe(0);
+            expect(internalForces.stations[internalForces.stations.length - 1]).toBe(1);
             for (const value of [
               ...internalForces.fx,
               ...internalForces.fy,

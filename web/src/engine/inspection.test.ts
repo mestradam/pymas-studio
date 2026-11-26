@@ -25,7 +25,9 @@ function maxAbs(values: number[]): number {
 
 describe("inspector · resumen de fuerzas por barra", () => {
   for (const fixture of allFixtures()) {
-    it(`${fixture.file}: los máximos coinciden con los esfuerzos internos`, () => {
+    // F2_analisis_actual.json es un volcado de proyecto sin bloque `results`.
+    const hasResults = Object.keys(fixture.model.results).length > 0;
+    it.skipIf(!hasResults)(`${fixture.file}: los máximos coinciden con los esfuerzos internos`, () => {
       const { model } = fixture;
       const result = firstResult(model);
       let checked = 0;

@@ -7,6 +7,7 @@ import {
   deformationHeatRange,
   deformedPointAt,
   hermiteInterpolateVectors,
+  isTrussFrame,
 } from "./deformation";
 import { framePositions, modelBounds, type Vec3 } from "./geometry";
 import { heatmapColor, heatmapRange } from "./heatmap";
@@ -37,6 +38,41 @@ function maxDeviation(actual: Vec3, expected: Vec3): number {
 function seriesAt(values: number[], index: number): number {
   const value = values[index];
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function localToGlobal(
+  vector: Vec3,
+  axes: { x: Vec3; y: Vec3; z: Vec3 },
+): Vec3 {
+  return [
+    vector[0] * axes.x[0] + vector[1] * axes.y[0] + vector[2] * axes.z[0],
+    vector[0] * axes.x[1] + vector[1] * axes.y[1] + vector[2] * axes.z[1],
+    vector[0] * axes.x[2] + vector[1] * axes.y[2] + vector[2] * axes.z[2],
+  ];
+}
+
+function globalToLocal(
+  vector: Vec3,
+  axes: { x: Vec3; y: Vec3; z: Vec3 },
+): Vec3 {
+  return [
+    vector[0] * axes.x[0] + vector[1] * axes.x[1] + vector[2] * axes.x[2],
+    vector[0] * axes.y[0] + vector[1] * axes.y[1] + vector[2] * axes.y[2],
+    vector[0] * axes.z[0] + vector[1] * axes.z[1] + vector[2] * axes.z[2],
+  ];
+}
+
+/** Distancia de un punto a la recta que une `a` y `b`. */
+function distanceToChord(point: Vec3, a: Vec3, b: Vec3): number {
+  const chord: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const offset: Vec3 = [point[0] - a[0], point[1] - a[1], point[2] - a[2]];
+  const cross: Vec3 = [
+    offset[1] * chord[2] - offset[2] * chord[1],
+    offset[2] * chord[0] - offset[0] * chord[2],
+    offset[0] * chord[1] - offset[1] * chord[0],
+  ];
+  const length = Math.hypot(chord[0], chord[1], chord[2]);
+  return length > 1e-15 ? Math.hypot(cross[0], cross[1], cross[2]) / length : 0;
 }
 
 describe("deformada · interpolación de Hermite", () => {
@@ -177,20 +213,24 @@ describe("deformada · ejes locales contra fixtures", () => {
 
 describe("deformada · todos los fixtures", () => {
   for (const fixture of fixtures) {
-    it(`${fixture.file}: curvas finitas, estaciones y mapa de calor`, () => {
+    // F2_analisis_actual.json es un volcado de proyecto sin bloque `results`.
+    const hasResults = Object.keys(fixture.model.results).length > 0;
+    it.skipIf(!hasResults)(`${fixture.file}: curvas finitas, estaciones y mapa de calor`, () => {
       const { model } = fixture;
       let checked = 0;
 
       for (const result of Object.values(model.results)) {
         for (const frameId of model.frameOrder) {
+          const frame = model.frames[frameId];
           const frameResult = result.frameResults[frameId];
-          if (!frameResult) continue;
+          if (!frame || !frameResult) continue;
           const curve = buildDeformedFrame(model, result, frameId, {
             scale: 1.5,
             subdivisions: 3,
           });
           const series = frameResult.internalDisplacements;
           const count = curve.sourceStations.length;
+          const truss = isTrussFrame(model, frame);
 
           expect(curve.stations.length).toBe((Math.max(count, 2) - 1) * 3 + 1);
           expect(curve.stations[0]).toBeCloseTo(0, 12);
@@ -202,20 +242,35 @@ describe("deformada · todos los fixtures", () => {
 
           for (let sourceIndex = 0; sourceIndex < count; sourceIndex += 1) {
             const curveIndex = sourceIndex * 3;
-            const expectedLocal: Vec3 = [
-              seriesAt(series.ux, sourceIndex),
-              seriesAt(series.uy, sourceIndex),
-              seriesAt(series.uz, sourceIndex),
-            ];
+            const station = curve.sourceStations[sourceIndex] ?? 0;
+            const uI = result.nodalDisplacements[frame.nodeI];
+            const uJ = result.nodalDisplacements[frame.nodeJ];
+            const nodalAvailable = uI !== undefined && uJ !== undefined;
+
+            let expectedLocal: Vec3;
+            let expectedGlobal: Vec3;
+            if (truss && nodalAvailable) {
+              expectedGlobal = [
+                (1 - station) * uI.ux + station * uJ.ux,
+                (1 - station) * uI.uy + station * uJ.uy,
+                (1 - station) * uI.uz + station * uJ.uz,
+              ];
+              expectedLocal = globalToLocal(expectedGlobal, frame.localAxes);
+            } else {
+              expectedLocal = [
+                seriesAt(series.ux, sourceIndex),
+                seriesAt(series.uy, sourceIndex),
+                seriesAt(series.uz, sourceIndex),
+              ];
+              expectedGlobal = localToGlobal(expectedLocal, frame.localAxes);
+            }
             expect(
               maxDeviation(curve.localDisplacements[curveIndex] ?? [0, 0, 0], expectedLocal),
             ).toBeLessThan(1e-12);
-            expect(curve.stations[curveIndex]).toBeCloseTo(
-              curve.sourceStations[sourceIndex] ?? 0,
-              12,
-            );
+            expect(curve.stations[curveIndex]).toBeCloseTo(station, 12);
 
             const displacement = curve.globalDisplacements[curveIndex] ?? [0, 0, 0];
+            expect(maxDeviation(displacement, expectedGlobal)).toBeLessThan(1e-12);
             const base = curve.undeformedPoints[curveIndex] ?? [0, 0, 0];
             const deformed = curve.deformedPoints[curveIndex] ?? [0, 0, 0];
             expect(
@@ -276,6 +331,125 @@ describe("deformada · todos los fixtures", () => {
         return maxDeviation(point, base) < 1e-12;
       }),
     ).toBe(true);
+  });
+});
+
+describe("deformada · celosías", () => {
+  it("detecta celosías por tipo de modelo y por rigidez a flexión", () => {
+    const truss = loadFixture("space_truss.json").model;
+    const trussFrame = truss.frames[truss.frameOrder[0] ?? ""];
+    expect(trussFrame).toBeDefined();
+    if (trussFrame) expect(isTrussFrame(truss, trussFrame)).toBe(true);
+
+    const bar = loadFixture("simple_bar.json").model;
+    const barFrame = bar.frames[bar.frameOrder[0] ?? ""];
+    expect(barFrame).toBeDefined();
+    if (barFrame) expect(isTrussFrame(bar, barFrame)).toBe(true);
+
+    const reparacion = loadFixture("F3_analisis_reparacion.json").model;
+    const trussMembers = Object.values(reparacion.frames).filter((member) =>
+      isTrussFrame(reparacion, member),
+    );
+    expect(trussMembers).toHaveLength(8);
+    const regular = Object.values(reparacion.frames).find(
+      (member) => !isTrussFrame(reparacion, member),
+    );
+    expect(regular).toBeDefined();
+    if (regular) expect(isTrussFrame(reparacion, regular)).toBe(false);
+  });
+
+  it("dibuja la cuerda recta entre nudos desplazados", () => {
+    const { model } = loadFixture("F3_analisis_cercha.json");
+    const result = firstResult(model);
+    let checked = 0;
+
+    for (const frameId of model.frameOrder) {
+      const frame = model.frames[frameId];
+      const uI = frame ? result.nodalDisplacements[frame.nodeI] : undefined;
+      const uJ = frame ? result.nodalDisplacements[frame.nodeJ] : undefined;
+      if (!frame || !uI || !uJ) continue;
+      const curve = buildDeformedFrame(model, result, frameId, {
+        scale: 3,
+        subdivisions: 4,
+      });
+      const first = curve.deformedPoints[0] ?? [0, 0, 0];
+      const last = curve.deformedPoints[curve.deformedPoints.length - 1] ?? [0, 0, 0];
+      const firstBase = curve.undeformedPoints[0] ?? [0, 0, 0];
+      const lastBase =
+        curve.undeformedPoints[curve.undeformedPoints.length - 1] ?? [0, 0, 0];
+
+      expect(
+        maxDeviation(first, [
+          firstBase[0] + uI.ux * 3,
+          firstBase[1] + uI.uy * 3,
+          firstBase[2] + uI.uz * 3,
+        ]),
+      ).toBeLessThan(1e-12);
+      expect(
+        maxDeviation(last, [
+          lastBase[0] + uJ.ux * 3,
+          lastBase[1] + uJ.uy * 3,
+          lastBase[2] + uJ.uz * 3,
+        ]),
+      ).toBeLessThan(1e-12);
+
+      const span = Math.hypot(last[0] - first[0], last[1] - first[1], last[2] - first[2]);
+      for (const point of curve.deformedPoints) {
+        expect(distanceToChord(point, first, last)).toBeLessThan(Math.max(span, 1) * 1e-12);
+      }
+      checked += 1;
+    }
+
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it("recupera el desplazamiento transversal que no trae internal_displacements", () => {
+    const { model } = loadFixture("F3_analisis_cercha.json");
+    const result = firstResult(model);
+    let recovered = 0;
+
+    for (const frameId of model.frameOrder) {
+      const frame = model.frames[frameId];
+      const frameResult = result.frameResults[frameId];
+      if (!frame || !frameResult) continue;
+      const curve = buildDeformedFrame(model, result, frameId, { subdivisions: 3 });
+      const exportedLateral = Math.max(
+        ...frameResult.internalDisplacements.uy.map(Math.abs),
+        ...frameResult.internalDisplacements.uz.map(Math.abs),
+      );
+      const recoveredLateral = Math.max(
+        ...curve.localDisplacements.map((value) => Math.hypot(value[1], value[2])),
+      );
+      if (exportedLateral < 1e-12 && recoveredLateral > 1e-9) recovered += 1;
+    }
+
+    expect(recovered).toBeGreaterThan(0);
+  });
+
+  it("auto-escala y mapa de calor usan la deformada nodal completa", () => {
+    const { model } = loadFixture("F3_analisis_cercha.json");
+    const result = firstResult(model);
+    const factor = autoDeformationScale(model, result, 0.1);
+    const target = modelBounds(model).diagonal * 0.1;
+    expect(Number.isFinite(factor)).toBe(true);
+    expect(factor).toBeGreaterThan(0);
+
+    const data = buildDeformation(model, result, { scale: factor, subdivisions: 4 });
+    const maximum = Math.max(
+      ...data.frames.map((curve) => curve.maxMagnitude * factor),
+    );
+    expect(closeTo(maximum, target, 1e-6, 1e-6)).toBe(true);
+
+    let nodalMax = 0;
+    for (const displacement of Object.values(result.nodalDisplacements)) {
+      nodalMax = Math.max(
+        nodalMax,
+        vecLength([displacement.ux, displacement.uy, displacement.uz]),
+      );
+    }
+    const range = deformationHeatRange(model, result, "magnitude");
+    expect(range.max).toBeGreaterThanOrEqual(nodalMax - 1e-12);
+    expect(closeTo(range.max, nodalMax, 1e-9, 1e-9)).toBe(true);
   });
 });
 
