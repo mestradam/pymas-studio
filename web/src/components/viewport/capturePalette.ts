@@ -22,7 +22,8 @@ interface MaterialSnapshot {
 }
 
 interface AttributeSnapshot {
-  attribute: THREE.BufferAttribute;
+  /** Atributo simple o búfer intercalado (colores de `LineSegments2`). */
+  attribute: { array: ArrayLike<number>; needsUpdate: boolean };
   data: Float32Array;
 }
 
@@ -169,7 +170,19 @@ export function applyCapturePalette(
         hasVertexColors(material) && material.vertexColors && geometry
           ? (geometry.getAttribute("color") as THREE.BufferAttribute | undefined)
           : undefined;
-      const usesOwnColors = Boolean(instanceColor || vertexColorAttribute);
+      // `LineSegments2` guarda los colores por vértice en un búfer intercalado
+      // (`instanceColorStart`/`instanceColorEnd` comparten el mismo arreglo).
+      const fatLineColors =
+        hasVertexColors(material) && material.vertexColors && geometry
+          ? (
+              geometry.getAttribute("instanceColorStart") as
+                | THREE.InterleavedBufferAttribute
+                | undefined
+            )?.data
+          : undefined;
+      const usesOwnColors = Boolean(
+        instanceColor || vertexColorAttribute || fatLineColors,
+      );
 
       if (hasColor(material) && !usesOwnColors) {
         snapshot.color = material.color.clone();
@@ -195,6 +208,13 @@ export function applyCapturePalette(
         );
         vertexColorAttribute.needsUpdate = true;
         attributes.push({ attribute: vertexColorAttribute, data });
+      }
+
+      if (fatLineColors) {
+        const data = (fatLineColors.array as Float32Array).slice();
+        transformTriples(fatLineColors.array as Float32Array, scratch, mode);
+        fatLineColors.needsUpdate = true;
+        attributes.push({ attribute: fatLineColors, data });
       }
 
       if (instanceColor) {

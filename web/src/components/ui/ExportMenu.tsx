@@ -117,7 +117,7 @@ export default function ExportMenu() {
             disabled={!computedResult}
           />
           <MenuButton
-            label="Esfuerzos máximos por barra"
+            label="Acciones internas máximas por barra"
             onClick={() => run(downloadFrameForcesCsv)}
             disabled={!computedResult}
           />
