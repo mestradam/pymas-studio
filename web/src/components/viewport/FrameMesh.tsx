@@ -2,11 +2,12 @@ import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import type { ColorMode } from "../../engine/colors";
 import { frameColor } from "../../engine/colors";
+import { framePositions, type Vec3 } from "../../engine/geometry";
 import {
-  framePositions,
-  sectionDisplayDimensions,
-  type Vec3,
-} from "../../engine/geometry";
+  BOX_FACES,
+  CORNERS,
+  frameSectionHalfExtents,
+} from "../../engine/deformedSolid";
 import type { PatternResultData, PymasModel } from "../../types/pymas";
 import { useModelStore, type RenderMode } from "../../store/useModelStore";
 import type { HeatmapMode } from "../../engine/heatmap";
@@ -16,6 +17,7 @@ import {
   resultHeatRange,
 } from "../../engine/resultHeatmap";
 import { useThemeStore } from "../../store/useThemeStore";
+import FatLineSegments, { WIRE_LINE_PX } from "./FatLineSegments";
 
 interface FrameMeshProps {
   model: PymasModel;
@@ -34,29 +36,6 @@ interface StationValue {
   station: number;
   value: number;
 }
-
-/** Caras de una caja unitaria; los vértices 0-3 están en x0 y 4-7 en x1. */
-const BOX_FACES: Array<[number, number, number]> = [
-  [0, 3, 2],
-  [0, 2, 1],
-  [4, 5, 6],
-  [4, 6, 7],
-  [0, 4, 7],
-  [0, 7, 3],
-  [1, 2, 6],
-  [1, 6, 5],
-  [0, 1, 5],
-  [0, 5, 4],
-  [3, 7, 6],
-  [3, 6, 2],
-];
-
-const CORNERS: Array<[number, number]> = [
-  [-1, -1],
-  [1, -1],
-  [1, 1],
-  [-1, 1],
-];
 
 function sanitizeStations(
   stations: number[],
@@ -172,24 +151,12 @@ export default function FrameMesh({
     for (const frameId of model.frameOrder) {
       const frame = model.frames[frameId];
       if (!frame) continue;
-      const section = model.sections[frame.sectionId];
-      const dims = sectionDisplayDimensions(
-        section ?? {
-          id: "",
-          name: "",
-          type: "Section",
-          dy: minDimension,
-          dz: minDimension,
-          A: 0,
-          Iy: 0,
-          Iz: 0,
-          J: 0,
-          explicitDimensions: false,
-          isRectangular: false,
-        },
+      const { halfY, halfZ } = frameSectionHalfExtents(
+        model,
+        frame,
+        sectionScale,
+        minDimension,
       );
-      const halfY = Math.max(dims.dy * sectionScale, minDimension) / 2;
-      const halfZ = Math.max(dims.dz * sectionScale, minDimension) / 2;
       const { p1 } = framePositions(frame, model.nodes);
       const { x: ex, y: ey, z: ez } = frame.localAxes;
       const length = Math.max(frame.length, 1e-6);
@@ -359,21 +326,14 @@ export default function FrameMesh({
 
   if (renderMode === "wire") {
     return (
-      <lineSegments renderOrder={2}>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            args={[wire.positions, 3]}
-          />
-          <bufferAttribute attach="attributes-color" args={[wire.colors, 3]} />
-        </bufferGeometry>
-        <lineBasicMaterial
-          vertexColors
-          transparent={opacity < 0.99}
-          opacity={opacity}
-          depthWrite={false}
-        />
-      </lineSegments>
+      <FatLineSegments
+        positions={wire.positions}
+        colors={wire.colors}
+        widthPx={WIRE_LINE_PX}
+        opacity={opacity}
+        depthWrite={false}
+        renderOrder={2}
+      />
     );
   }
 

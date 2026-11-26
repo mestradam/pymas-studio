@@ -4,13 +4,18 @@ import { useModelStore } from "../../store/useModelStore";
 import { buildLegend } from "../../engine/colors";
 import { patternLoadCount } from "../../engine/parser";
 import { autoDeformationScale } from "../../engine/deformation";
-import { autoDiagramScale, FORCE_COMPONENTS } from "../../engine/diagrams";
+import {
+  autoDiagramScale,
+  FORCE_COMPONENTS,
+  FORCE_LABELS,
+} from "../../engine/diagrams";
 import { formatNumber } from "../../engine/geometry";
 import {
   HEATMAP_GRADIENT,
   HEATMAP_LABELS,
   isForceHeatScalar,
   isMomentScalar,
+  isRotationScalar,
 } from "../../engine/heatmap";
 import { resultHeatRange } from "../../engine/resultHeatmap";
 import { UP_AXES, viewPlaneLabel } from "../../engine/upAxis";
@@ -37,26 +42,15 @@ const DEFORMATION_HEATMAP_OPTIONS = [
   ["ux", "ux"],
   ["uy", "uy"],
   ["uz", "uz"],
+  ["rx", "rx"],
+  ["ry", "ry"],
+  ["rz", "rz"],
   ["drift", "Deriva"],
 ] as const;
 
-const FORCE_HEATMAP_OPTIONS = [
-  ["fx", "N"],
-  ["fy", "Vy"],
-  ["fz", "Vz"],
-  ["mx", "T"],
-  ["my", "My"],
-  ["mz", "Mz"],
-] as const;
-
-const FORCE_COMPONENT_LABELS: Record<(typeof FORCE_COMPONENTS)[number], string> = {
-  fx: "Fx",
-  fy: "Fy",
-  fz: "Fz",
-  mx: "Mx",
-  my: "My",
-  mz: "Mz",
-};
+const FORCE_HEATMAP_OPTIONS = FORCE_COMPONENTS.map(
+  (component) => [component, FORCE_LABELS[component]] as const,
+);
 
 function Toggle({
   label,
@@ -110,6 +104,10 @@ export default function ControlSidebar({
   const showDeformed = useModelStore((state) => state.showDeformed);
   const deformationScale = useModelStore((state) => state.deformationScale);
   const showGhost = useModelStore((state) => state.showGhost);
+  const deformedRenderMode = useModelStore((state) => state.deformedRenderMode);
+  const setDeformedRenderMode = useModelStore(
+    (state) => state.setDeformedRenderMode,
+  );
   const animateDeformation = useModelStore((state) => state.animateDeformation);
   const heatmapMode = useModelStore((state) => state.heatmapMode);
   const showForceDiagrams = useModelStore((state) => state.showForceDiagrams);
@@ -238,6 +236,7 @@ export default function ControlSidebar({
         ? `${units.force}·${units.length}`
         : units.force;
     }
+    if (isRotationScalar(heatmapMode)) return "rad";
     return units.length;
   })();
   const formatHeat = (value: number) =>
@@ -524,6 +523,27 @@ export default function ControlSidebar({
                   checked={showDeformed}
                   onChange={setShowDeformed}
                 />
+                <div className="seg my-1 w-full">
+                  {(
+                    [
+                      ["line", "Línea"],
+                      ["extruded", "Secciones extruidas"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      disabled={!showDeformed}
+                      className={cn(
+                        "seg-btn flex-1",
+                        deformedRenderMode === id && "seg-btn-active",
+                      )}
+                      onClick={() => setDeformedRenderMode(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <Toggle
                   label="Estructura fantasma"
                   checked={showGhost}
@@ -566,7 +586,7 @@ export default function ControlSidebar({
                 <div className="mt-1 text-[9px] uppercase tracking-wide text-slate-500">
                   Deformada
                 </div>
-                <div className="grid grid-cols-5 gap-1">
+                <div className="grid grid-cols-4 gap-1">
                   {DEFORMATION_HEATMAP_OPTIONS.map(([mode, label]) => (
                     <button
                       key={mode}
@@ -582,7 +602,7 @@ export default function ControlSidebar({
                   ))}
                 </div>
                 <div className="mt-1.5 text-[9px] uppercase tracking-wide text-slate-500">
-                  Esfuerzos internos
+                  Acciones internas
                 </div>
                 <div className="grid grid-cols-3 gap-1">
                   {FORCE_HEATMAP_OPTIONS.map(([mode, label]) => (
@@ -628,7 +648,7 @@ export default function ControlSidebar({
 
             <section>
               <div className="mb-1.5 flex items-center justify-between">
-                <h2 className="panel-title">Diagramas de esfuerzos</h2>
+                <h2 className="panel-title">Diagramas de acciones internas</h2>
                 <span className="font-mono text-[10px] text-slate-500">
                   {formatNumber(autoDiagramFactor * diagramScale)}×
                 </span>
@@ -656,7 +676,7 @@ export default function ControlSidebar({
                     )}
                     onClick={() => toggleDiagramComponent(component)}
                   >
-                    {FORCE_COMPONENT_LABELS[component]}
+                    {FORCE_LABELS[component]}
                   </button>
                 ))}
               </div>

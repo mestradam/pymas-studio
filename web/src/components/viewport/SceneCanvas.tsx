@@ -208,20 +208,27 @@ function ModelLayer({
   const showDeformed = useModelStore((state) => state.showDeformed);
   const showForceDiagrams = useModelStore((state) => state.showForceDiagrams);
   const showReactions = useModelStore((state) => state.showReactions);
+  const deformedRenderMode = useModelStore((state) => state.deformedRenderMode);
+  // Con la deformada extruida el sólido original se oculta: su posición queda
+  // representada por la estructura fantasma.
+  const hideUndeformed =
+    !ghost && Boolean(result) && showDeformed && deformedRenderMode === "extruded";
 
   return (
     <group>
-      <FrameMesh
-        model={model}
-        result={result}
-        heatmapMode={heatmapMode}
-        renderMode={renderModeOverride ?? renderMode}
-        colorMode={colorMode}
-        opacity={opacityOverride ?? opacity}
-        sectionScale={sectionScale}
-        diagonal={bounds.diagonal}
-        colorForFrame={colorForFrame}
-      />
+      {!hideUndeformed && (
+        <FrameMesh
+          model={model}
+          result={result}
+          heatmapMode={heatmapMode}
+          renderMode={renderModeOverride ?? renderMode}
+          colorMode={colorMode}
+          opacity={opacityOverride ?? opacity}
+          sectionScale={sectionScale}
+          diagonal={bounds.diagonal}
+          colorForFrame={colorForFrame}
+        />
+      )}
       {!ghost && result && showDeformed && (
         <DeformedStructure
           model={model}

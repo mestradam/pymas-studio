@@ -24,6 +24,8 @@ import {
 } from "../engine/upAxis";
 
 export type RenderMode = "wire" | "extruded";
+/** Representación de la deformada: polilínea o secciones `dy × dz` extruidas. */
+export type DeformedRenderMode = "line" | "extruded";
 
 /**
  * Posición de los vectores de carga respecto del elemento cargado:
@@ -261,6 +263,7 @@ export interface ModelState {
   /** Multiplicador sobre la escala automática de la deformada. */
   deformationScale: number;
   showGhost: boolean;
+  deformedRenderMode: DeformedRenderMode;
   animateDeformation: boolean;
   heatmapMode: HeatmapMode;
 
@@ -331,6 +334,7 @@ export interface ModelActions {
   setDeformationScale: (value: number) => void;
   setShowDeformed: (value: boolean) => void;
   setShowGhost: (value: boolean) => void;
+  setDeformedRenderMode: (mode: DeformedRenderMode) => void;
   setAnimateDeformation: (value: boolean) => void;
   setHeatmapMode: (mode: HeatmapMode) => void;
   setShowForceDiagrams: (value: boolean) => void;
@@ -399,6 +403,7 @@ const INITIAL_STATE: ModelState = {
   showDeformed: true,
   deformationScale: 1,
   showGhost: true,
+  deformedRenderMode: "line",
   animateDeformation: true,
   heatmapMode: "magnitude",
 
@@ -856,6 +861,7 @@ export const useModelStore = create<ModelStore>((set) => {
       set({ deformationScale: Math.min(10, Math.max(0.05, deformationScale)) }),
     setShowDeformed: (showDeformed) => set({ showDeformed }),
     setShowGhost: (showGhost) => set({ showGhost }),
+    setDeformedRenderMode: (deformedRenderMode) => set({ deformedRenderMode }),
     setAnimateDeformation: (animateDeformation) => set({ animateDeformation }),
     setHeatmapMode: (heatmapMode) => set({ heatmapMode }),
     setShowForceDiagrams: (showForceDiagrams) => set({ showForceDiagrams }),

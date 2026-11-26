@@ -4,7 +4,11 @@ import type {
   PatternResultData,
   PymasModel,
 } from "../types/pymas";
-import { FORCE_COMPONENTS, type ForceComponent } from "./diagrams";
+import {
+  FORCE_COMPONENTS,
+  FORCE_LONG_LABELS,
+  type ForceComponent,
+} from "./diagrams";
 import { isFiniteNumber } from "./geometry";
 
 /**
@@ -36,12 +40,7 @@ export const FRAME_CHART_ORDER: readonly FrameChartKey[] = [
 ];
 
 export const FRAME_CHART_LABELS: Record<FrameChartKey, string> = {
-  fx: "Fx · axial",
-  fy: "Fy · cortante",
-  fz: "Fz · cortante",
-  mx: "Mx · torsión",
-  my: "My · flexión",
-  mz: "Mz · flexión",
+  ...FORCE_LONG_LABELS,
   deflection: "δ · deflexión local",
 };
 
@@ -117,7 +116,7 @@ function safeStations(stations: number[] | undefined, count: number): number[] {
   return stations.map((value) => (isFiniteNumber(value) ? value : 0));
 }
 
-/** Series de los seis esfuerzos locales más la deflexión transversal. */
+/** Series de las seis acciones internas locales más la deflexión transversal. */
 export function buildFrameChartSeries(
   result: PatternResultData,
   frameId: string,
