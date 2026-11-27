@@ -83,7 +83,7 @@ export default function ExportMenu() {
             <span>
               <span className="block text-[11px] text-slate-200">PNG · fondo oscuro</span>
               <span className="block text-[9px] text-slate-500">
-                Alta resolución (×2) con caso y escala
+                Solo el visor (×2), con etiquetas y escala de colores
               </span>
             </span>
           </button>

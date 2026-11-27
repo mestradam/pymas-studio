@@ -9,6 +9,12 @@ import {
   nodalDisplacementsCsv,
   reactionsCsv,
 } from "../engine/exporters";
+import { heatmapColor } from "../engine/heatmap";
+import {
+  heatLegendData,
+  heatLegendInputFromStore,
+  type HeatLegendData,
+} from "../components/ui/useHeatLegend";
 
 function sanitizeFileName(value: string): string {
   const cleaned = value
@@ -131,71 +137,144 @@ export function downloadComparisonCsv(): boolean {
   return true;
 }
 
-function drawCover(
-  context: CanvasRenderingContext2D,
-  image: HTMLCanvasElement,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-): void {
-  const scale = Math.max(width / image.width, height / image.height);
-  const drawWidth = image.width * scale;
-  const drawHeight = image.height * scale;
-  context.drawImage(
-    image,
-    x + (width - drawWidth) / 2,
-    y + (height - drawHeight) / 2,
-    drawWidth,
-    drawHeight,
-  );
-}
+const FONT_FAMILY = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 
-function drawPaneLabel(
+/**
+ * Escala vertical del mapa de colores dentro de la imagen, pegada al borde
+ * derecho y centrada en altura, igual que `HeatLegendOverlay` en el visor.
+ * `pixel` es la relación píxeles de salida / píxeles CSS.
+ */
+function drawHeatLegend(
   context: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
+  legend: HeatLegendData,
+  canvasWidth: number,
+  canvasHeight: number,
+  pixel: number,
   light: boolean,
 ): void {
+  const barWidth = 12 * pixel;
+  const barHeight = Math.min(176 * pixel, canvasHeight * 0.6);
+  const padding = 8 * pixel;
+  const gap = 6 * pixel;
+  const valueFont = `500 ${10 * pixel}px ${FONT_FAMILY}`;
+  const titleFont = `600 ${11 * pixel}px ${FONT_FAMILY}`;
+  const unitFont = `400 ${9 * pixel}px ${FONT_FAMILY}`;
+  const middle = (legend.min + legend.max) / 2;
+  const values = [legend.max, middle, legend.min].map(legend.formatValue);
+
   context.save();
-  context.font =
-    "600 18px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
-  const width = context.measureText(text).width + 24;
-  context.fillStyle = light ? "rgba(15, 23, 42, 0.78)" : "rgba(15, 23, 42, 0.82)";
+  context.font = valueFont;
+  const valueWidth = Math.max(...values.map((value) => context.measureText(value).width));
+  context.font = titleFont;
+  const titleWidth = context.measureText(legend.label).width;
+  context.font = unitFont;
+  const unitWidth = context.measureText(legend.unit).width;
+  const titleHeight = (legend.unit ? 24 : 14) * pixel;
+
+  const width = Math.max(barWidth + gap + valueWidth, titleWidth, unitWidth) + padding * 2;
+  const height = padding * 2 + titleHeight + gap + barHeight;
+  const x = canvasWidth - 12 * pixel - width;
+  const y = (canvasHeight - height) / 2;
+
+  // Tarjeta opaca, como en el visor.
+  context.fillStyle = light ? "#ffffff" : "#020617";
+  context.strokeStyle = light ? "rgba(15, 23, 42, 0.18)" : "rgba(255, 255, 255, 0.12)";
+  context.lineWidth = pixel;
   context.beginPath();
-  context.roundRect(x + 16, y + 16, width, 34, 8);
+  context.roundRect(x, y, width, height, 8 * pixel);
   context.fill();
-  context.fillStyle = "#f8fafc";
-  context.fillText(text, x + 28, y + 39);
+  context.stroke();
+
+  context.textAlign = "center";
+  context.textBaseline = "top";
+  context.fillStyle = light ? "#0f172a" : "#f1f5f9";
+  context.font = titleFont;
+  context.fillText(legend.label, x + width / 2, y + padding);
+  if (legend.unit) {
+    context.fillStyle = light ? "#64748b" : "#64748b";
+    context.font = unitFont;
+    context.fillText(legend.unit, x + width / 2, y + padding + 13 * pixel);
+  }
+
+  // Barra: mínimo abajo, máximo arriba, con los mismos colores de la escena.
+  const barX = x + padding;
+  const barY = y + padding + titleHeight + gap;
+  const gradient = context.createLinearGradient(0, barY + barHeight, 0, barY);
+  for (let step = 0; step <= 20; step += 1) {
+    const t = step / 20;
+    const [r, g, b] = heatmapColor(t, 0, 1);
+    gradient.addColorStop(
+      t,
+      `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`,
+    );
+  }
+  context.fillStyle = gradient;
+  context.beginPath();
+  context.roundRect(barX, barY, barWidth, barHeight, barWidth / 2);
+  context.fill();
+
+  context.textAlign = "left";
+  context.font = valueFont;
+  const valueX = barX + barWidth + gap;
+  context.fillStyle = light ? "#334155" : "#cbd5e1";
+  context.textBaseline = "top";
+  context.fillText(values[0]!, valueX, barY);
+  context.fillStyle = light ? "#64748b" : "#64748b";
+  context.textBaseline = "middle";
+  context.fillText(values[1]!, valueX, barY + barHeight / 2);
+  context.fillStyle = light ? "#334155" : "#cbd5e1";
+  context.textBaseline = "bottom";
+  context.fillText(values[2]!, valueX, barY + barHeight);
   context.restore();
 }
 
-function drawHeatLegend(
+/** Leyenda del mapa de demanda A→B, abajo al centro, como en el visor. */
+function drawCompareLegend(
   context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
+  canvasWidth: number,
+  canvasHeight: number,
+  pixel: number,
   light: boolean,
 ): void {
-  const width = 220;
-  const height = 12;
-  const gradient = context.createLinearGradient(x, 0, x + width, 0);
-  // Sobre blanco la leyenda usa tonos más profundos para conservar contraste.
+  const barWidth = 96 * pixel;
+  const barHeight = 6 * pixel;
+  const padding = 8 * pixel;
+  const font = `500 ${9 * pixel}px ${FONT_FAMILY}`;
+  const title = "DEMANDA A→B";
+  const ticks = "−50 % · 0 · +50 %";
+
+  context.save();
+  context.font = font;
+  const titleWidth = context.measureText(title).width;
+  const ticksWidth = context.measureText(ticks).width;
+  const width = padding * 4 + titleWidth + barWidth + ticksWidth;
+  const height = 24 * pixel;
+  const x = (canvasWidth - width) / 2;
+  const y = canvasHeight - 12 * pixel - height;
+
+  context.fillStyle = light ? "#ffffff" : "#020617";
+  context.strokeStyle = light ? "rgba(15, 23, 42, 0.18)" : "rgba(255, 255, 255, 0.12)";
+  context.lineWidth = pixel;
+  context.beginPath();
+  context.roundRect(x, y, width, height, 8 * pixel);
+  context.fill();
+  context.stroke();
+
+  context.textBaseline = "middle";
+  context.fillStyle = light ? "#475569" : "#94a3b8";
+  context.fillText(title, x + padding, y + height / 2);
+  const barX = x + padding * 2 + titleWidth;
+  const gradient = context.createLinearGradient(barX, 0, barX + barWidth, 0);
   gradient.addColorStop(0, light ? "#15803d" : "#22c55e");
   gradient.addColorStop(0.5, light ? "#475569" : "#64748b");
   gradient.addColorStop(1, light ? "#b91c1c" : "#ef4444");
   context.fillStyle = gradient;
   context.beginPath();
-  context.roundRect(x, y, width, height, 4);
+  context.roundRect(barX, y + (height - barHeight) / 2, barWidth, barHeight, barHeight / 2);
   context.fill();
-  context.font =
-    "500 14px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
-  context.fillStyle = light ? "#334155" : "#94a3b8";
-  context.fillText("−50 %", x, y + 30);
-  context.fillText("0", x + width / 2 - 4, y + 30);
-  context.fillText("+50 %", x + width - 34, y + 30);
-  context.fillStyle = light ? "#475569" : "#cbd5e1";
-  context.fillText("Demanda de barras: verde reduce · rojo aumenta", x + width + 18, y + 12);
+  context.fillStyle = light ? "#475569" : "#94a3b8";
+  context.fillText(ticks, barX + barWidth + padding, y + height / 2);
+  context.restore();
 }
 
 export interface ScenePngOptions {
@@ -204,7 +283,11 @@ export interface ScenePngOptions {
   scale?: number;
 }
 
-/** Compone y descarga un PNG del lienzo 3D actual, con leyenda de caso/escala. */
+/**
+ * Descarga un PNG con exactamente el recuadro del visor: la escena 3D, sus
+ * etiquetas y, si hay mapa de colores, su escala. Sin títulos ni márgenes.
+ * En comparación lado a lado se unen los dos paneles con una línea divisoria.
+ */
 export async function exportScenePng({
   whiteBackground,
   scale = 2,
@@ -221,17 +304,11 @@ export async function exportScenePng({
   const paneB = split ? captureCanvas("b", scale, background) : null;
 
   const light = whiteBackground;
-  const paneWidth = 1600;
-  const gap = 16;
-  const padding = 48;
-  const headerHeight = 112;
-  const footerHeight = 96;
-  const paneHeight = Math.round(
-    paneWidth * (paneA.height / Math.max(paneA.width, 1)),
-  );
-  const paneCount = paneB ? 2 : 1;
-  const width = padding * 2 + paneWidth * paneCount + gap * (paneCount - 1);
-  const height = padding * 2 + headerHeight + paneHeight + footerHeight;
+  const divider = paneB ? Math.max(1, Math.round(scale)) : 0;
+  const width = paneA.width + (paneB ? divider + paneB.width : 0);
+  const height = Math.max(paneA.height, paneB?.height ?? 0);
+  // Relación píxeles de salida / píxeles CSS del visor (≈ scale).
+  const pixel = Math.max(scale, 1);
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -241,82 +318,27 @@ export async function exportScenePng({
 
   context.fillStyle = light ? "#ffffff" : "#060a13";
   context.fillRect(0, 0, width, height);
-
-  const title = comparing
-    ? "PyMAS Studio 3D · Comparación de modelos A/B"
-    : "PyMAS Studio 3D · Modelo estructural";
-  context.fillStyle = light ? "#0f172a" : "#f8fafc";
-  context.font =
-    "700 32px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
-  context.fillText(title, padding, padding + 30);
-
-  context.font =
-    "500 17px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
-  context.fillStyle = light ? "#475569" : "#94a3b8";
-  const models = comparing
-    ? `A · ${state.sourceLabel ?? model.meta.name}    ↔    B · ${
-        state.compareSourceLabel ?? state.compareModel?.meta.name ?? "Modelo B"
-      }`
-    : state.sourceLabel ?? model.meta.name;
-  context.fillText(models.slice(0, 130), padding, padding + 60);
-
-  context.textAlign = "right";
-  context.fillStyle = light ? "#64748b" : "#64748b";
-  context.font =
-    "500 15px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
-  context.fillText(
-    new Date().toLocaleString("es-ES"),
-    width - padding,
-    padding + 28,
-  );
-  context.textAlign = "left";
-
-  const paneTop = padding + headerHeight;
-  const paneAX = padding;
-  drawCover(context, paneA, paneAX, paneTop, paneWidth, paneHeight);
-  context.strokeStyle = light ? "rgba(15, 23, 42, 0.18)" : "rgba(255, 255, 255, 0.14)";
-  context.lineWidth = 2;
-  context.strokeRect(paneAX, paneTop, paneWidth, paneHeight);
+  context.drawImage(paneA, 0, 0);
   if (paneB) {
-    const paneBX = padding + paneWidth + gap;
-    drawCover(context, paneB, paneBX, paneTop, paneWidth, paneHeight);
-    context.strokeRect(paneBX, paneTop, paneWidth, paneHeight);
-    drawPaneLabel(context, "A · Base", paneAX, paneTop, light);
-    drawPaneLabel(context, "B · Modificado", paneBX, paneTop, light);
-  } else if (comparing) {
-    drawPaneLabel(context, "A + B · superpuestos", paneAX, paneTop, light);
+    context.fillStyle = light ? "rgba(15, 23, 42, 0.18)" : "rgba(255, 255, 255, 0.14)";
+    context.fillRect(paneA.width, 0, divider, height);
+    context.drawImage(paneB, paneA.width + divider, 0);
   }
 
-  const footerY = paneTop + paneHeight + 34;
-  context.font =
-    "500 15px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
-  context.fillStyle = light ? "#334155" : "#cbd5e1";
-  const units = `${model.meta.units.force} · ${model.meta.units.length}`;
-  context.fillText(
-    `Caso: ${activeCaseLabel()}    ·    Unidades: ${units}    ·    Escala de deformada: ×${state.deformationScale}${
-      state.showDeformed ? "" : " (deformada oculta)"
-    }`,
-    padding,
-    footerY,
-  );
-
-  if (comparing && state.compareHeatmap) {
-    drawHeatLegend(context, padding, footerY + 18, light);
-  } else {
-    context.fillStyle = light ? "#64748b" : "#64748b";
-    context.fillText(
-      "Vista generada desde el visor; escala y caso activos al momento de exportar.",
-      padding,
-      footerY + 24,
-    );
-  }
-
-  context.textAlign = "right";
-  context.fillStyle = light ? "#94a3b8" : "#475569";
-  context.font =
-    "500 13px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
-  context.fillText("PyMAS Studio 3D", width - padding, footerY + 30);
+  // Marca discreta: pequeña y gris en la esquina superior izquierda.
+  context.save();
+  context.font = `500 ${10 * pixel}px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif`;
+  context.fillStyle = light ? "rgba(100, 116, 139, 0.7)" : "rgba(148, 163, 184, 0.55)";
   context.textAlign = "left";
+  context.textBaseline = "top";
+  context.fillText("PyMAS Studio 3D", 10 * pixel, 8 * pixel);
+  context.restore();
+
+  const legend = heatLegendData(heatLegendInputFromStore());
+  if (legend) drawHeatLegend(context, legend, width, height, pixel, light);
+  if (comparing && state.compareHeatmap) {
+    drawCompareLegend(context, width, height, pixel, light);
+  }
 
   const blob = await new Promise<Blob | null>((resolve) => {
     canvas.toBlob(resolve, "image/png");
