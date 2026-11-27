@@ -12,6 +12,7 @@ import {
 import { formatNumber } from "../../engine/geometry";
 import { HEATMAP_LABELS } from "../../engine/heatmap";
 import { cn } from "../../lib/utils";
+import VisibilityPanel from "./VisibilityPanel";
 
 const MODEL_TYPE_LABELS: Record<string, string> = {
   beam: "Viga",
@@ -719,6 +720,8 @@ export default function ControlSidebar({
                 />
               </div>
             </section>
+
+            <VisibilityPanel model={model} />
 
             <section>
               <h2 className="panel-title mb-1.5">Capas</h2>

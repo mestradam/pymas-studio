@@ -12,6 +12,7 @@ import DropZoneOverlay from "./components/ui/DropZoneOverlay";
 import ElementInspector from "./components/ui/ElementInspector";
 import ChartCursorReadout from "./components/ui/ChartCursorReadout";
 import HeatLegendOverlay from "./components/ui/HeatLegendOverlay";
+import HiddenFramesBadge from "./components/ui/HiddenFramesBadge";
 import ResultsTables from "./components/ui/ResultsTables";
 import ComparePanel, { CompareLegend } from "./components/ui/ComparePanel";
 import { useGlobalDrop } from "./components/ui/useGlobalDrop";
@@ -64,6 +65,27 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // `code` y no `key`: con Alt algunos teclados cambian el carácter.
+      if (event.code === "KeyH" || event.code === "KeyI") {
+        const target = event.target;
+        if (
+          event.ctrlKey ||
+          event.metaKey ||
+          (target instanceof Element &&
+            target.closest("input, select, textarea, [contenteditable='true']"))
+        ) {
+          return;
+        }
+        const state = useModelStore.getState();
+        if (event.code === "KeyH") {
+          if (event.altKey) state.showAll();
+          else state.hideSelection();
+        } else if (!event.altKey) {
+          state.isolateSelection();
+        }
+        event.preventDefault();
+        return;
+      }
       if (event.key !== "Escape") return;
       const state = useModelStore.getState();
       if (state.resultsTablesOpen) {
@@ -108,6 +130,7 @@ export default function App() {
           <ElementInspector />
           <ChartCursorReadout />
           {model && <HeatLegendOverlay />}
+          {model && <HiddenFramesBadge />}
 
           <ComparePanel />
           <CompareLegend />

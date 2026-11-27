@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Box, CircleDot, X } from "lucide-react";
+import { Box, CircleDot, EyeOff, Focus, X } from "lucide-react";
 import { useModelStore } from "../../store/useModelStore";
 import { formatNumber } from "../../engine/geometry";
 import {
@@ -308,6 +308,8 @@ export default function ElementInspector() {
   const selectedNodeId = useModelStore((state) => state.selectedNodeId);
   const clearSelection = useModelStore((state) => state.clearSelection);
   const selectFrame = useModelStore((state) => state.selectFrame);
+  const hideSelection = useModelStore((state) => state.hideSelection);
+  const isolateSelection = useModelStore((state) => state.isolateSelection);
   const chartStation = useModelStore((state) => state.chartStation);
   const setChartStation = useModelStore((state) => state.setChartStation);
   const computedResult = useModelStore((state) => state.computedResult);
@@ -378,14 +380,34 @@ export default function ElementInspector() {
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn h-7 w-7 shrink-0 px-0"
-          onClick={clearSelection}
-          title="Cerrar inspector (Esc)"
-        >
-          <X size={14} />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            className="btn h-7 w-7 px-0"
+            onClick={hideSelection}
+            title={frame ? "Ocultar barra (H)" : "Ocultar barras del nudo (H)"}
+            aria-label="Ocultar"
+          >
+            <EyeOff size={14} />
+          </button>
+          <button
+            type="button"
+            className="btn h-7 w-7 px-0"
+            onClick={isolateSelection}
+            title={frame ? "Aislar barra (I)" : "Aislar barras del nudo (I)"}
+            aria-label="Aislar"
+          >
+            <Focus size={14} />
+          </button>
+          <button
+            type="button"
+            className="btn h-7 w-7 px-0"
+            onClick={clearSelection}
+            title="Cerrar inspector (Esc)"
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3">
