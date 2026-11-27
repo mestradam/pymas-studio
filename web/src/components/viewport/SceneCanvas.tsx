@@ -33,6 +33,7 @@ import { applyCapturePalette } from "./capturePalette";
 import { drawHtmlOverlays } from "./captureOverlays";
 import { modelToView, viewAxisNames, type UpAxis } from "../../engine/upAxis";
 import { upAxisQuaternion } from "./threeUtils";
+import { useVisibleModel } from "./useVisibleModel";
 import { boxCorners, fitCameraToPoints } from "../../engine/cameraFit";
 
 /** Grupo con todo lo dibujado del modelo; es lo que encuadra la cámara. */
@@ -793,7 +794,12 @@ export default function SceneCanvas() {
     [heatColors],
   );
 
-  if (!model) {
+  // Vista filtrada (barras ocultas fuera); `bounds` sigue siendo del modelo
+  // completo para que la grilla y la cámara no salten al ocultar.
+  const visibleBase = useVisibleModel(model);
+  const visibleCompare = useVisibleModel(compareModel);
+
+  if (!model || !visibleBase) {
     return (
       <div className="absolute inset-0">
         <ScenePane
@@ -811,7 +817,7 @@ export default function SceneCanvas() {
 
   const baseLayer = (
     <ModelLayer
-      model={model}
+      model={visibleBase}
       result={computedResult}
       bounds={bounds}
       colorForFrame={colorForBase}
@@ -830,9 +836,9 @@ export default function SceneCanvas() {
           onBackgroundClick={clearSelection}
         >
           {baseLayer}
-          {comparing && compareModel && (
+          {comparing && visibleCompare && (
             <ModelLayer
-              model={compareModel}
+              model={visibleCompare}
               result={compareResult}
               bounds={bounds}
               colorForFrame={() => "#f59e0b"}
@@ -869,9 +875,9 @@ export default function SceneCanvas() {
           sync={sync}
           onBackgroundClick={clearSelection}
         >
-          {compareModel && (
+          {visibleCompare && (
             <ModelLayer
-              model={compareModel}
+              model={visibleCompare}
               result={compareResult}
               bounds={bounds}
             />

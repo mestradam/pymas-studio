@@ -12,6 +12,7 @@ import {
 import { formatNumber } from "../../engine/geometry";
 import { HEATMAP_LABELS } from "../../engine/heatmap";
 import { cn } from "../../lib/utils";
+import VisibilityPanel from "./VisibilityPanel";
 
 const MODEL_TYPE_LABELS: Record<string, string> = {
   beam: "Viga",
@@ -46,14 +47,25 @@ function Toggle({
   label,
   checked,
   onChange,
+  shortcut,
 }: {
   label: string;
   checked: boolean;
   onChange: (value: boolean) => void;
+  /** Tecla del atajo, mostrada en gris junto al interruptor. */
+  shortcut?: string;
 }) {
   return (
     <label className="switch-row">
       <span>{label}</span>
+      {shortcut && (
+        <kbd
+          className="ml-auto mr-2 font-mono text-[9px] text-slate-600"
+          title={`Atajo: tecla ${shortcut}`}
+        >
+          {shortcut}
+        </kbd>
+      )}
       <input
         type="checkbox"
         checked={checked}
@@ -428,6 +440,7 @@ export default function ControlSidebar({
               <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-1">
                 <Toggle
                   label="Mostrar deformada"
+                  shortcut="D"
                   checked={showDeformed}
                   onChange={setShowDeformed}
                 />
@@ -447,6 +460,7 @@ export default function ControlSidebar({
                         deformedRenderMode === id && "seg-btn-active",
                       )}
                       onClick={() => setDeformedRenderMode(id)}
+                      title="Línea ↔ secciones extruidas · tecla X"
                     >
                       {label}
                     </button>
@@ -459,6 +473,7 @@ export default function ControlSidebar({
                 />
                 <Toggle
                   label="Animación armónica"
+                  shortcut="A"
                   checked={animateDeformation}
                   onChange={setAnimateDeformation}
                 />
@@ -552,6 +567,7 @@ export default function ControlSidebar({
               <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-1">
                 <Toggle
                   label="Mostrar diagramas 3D"
+                  shortcut="M"
                   checked={showForceDiagrams}
                   onChange={setShowForceDiagrams}
                 />
@@ -619,6 +635,7 @@ export default function ControlSidebar({
                         renderMode === id && "seg-btn-active",
                       )}
                       onClick={() => setRenderMode(id)}
+                      title="Extruido ↔ alambre · tecla E"
                     >
                       {label}
                     </button>
@@ -720,27 +737,33 @@ export default function ControlSidebar({
               </div>
             </section>
 
+            <VisibilityPanel model={model} />
+
             <section>
               <h2 className="panel-title mb-1.5">Capas</h2>
               <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-1">
-                <Toggle label="Nudos" checked={showNodes} onChange={setShowNodes} />
+                <Toggle label="Nudos" shortcut="N" checked={showNodes} onChange={setShowNodes} />
                 <Toggle
                   label="Etiquetas de nudos"
+                  shortcut="C"
                   checked={showLabels}
                   onChange={setShowLabels}
                 />
                 <Toggle
                   label="Apoyos"
+                  shortcut="S"
                   checked={showSupports}
                   onChange={setShowSupports}
                 />
                 <Toggle
                   label="Rótulas / liberaciones"
+                  shortcut="J"
                   checked={showReleases}
                   onChange={setShowReleases}
                 />
                 <Toggle
                   label="Vectores de carga"
+                  shortcut="L"
                   checked={showLoads}
                   onChange={setShowLoads}
                 />
@@ -768,10 +791,11 @@ export default function ControlSidebar({
                 )}
                 <Toggle
                   label="Reacciones en apoyos"
+                  shortcut="R"
                   checked={showReactions}
                   onChange={setShowReactions}
                 />
-                <Toggle label="Grilla XY" checked={showGrid} onChange={setShowGrid} />
+                <Toggle label="Grilla XY" shortcut="G" checked={showGrid} onChange={setShowGrid} />
               </div>
             </section>
 

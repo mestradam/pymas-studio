@@ -2,6 +2,7 @@ import {
   Box,
   ChevronDown,
   GitCompareArrows,
+  Keyboard,
   Loader2,
   Maximize2,
   Moon,
@@ -16,11 +17,11 @@ import { cn } from "../../lib/utils";
 import OpenFileButton from "./OpenFileButton";
 import ExportMenu from "./ExportMenu";
 
-const VIEWS: Array<{ id: ViewPreset; title: string }> = [
-  { id: "iso", title: "Vista isométrica" },
-  { id: "plan", title: "Planta" },
-  { id: "front", title: "Elevación frontal" },
-  { id: "side", title: "Elevación lateral" },
+const VIEWS: Array<{ id: ViewPreset; title: string; key: string }> = [
+  { id: "iso", title: "Vista isométrica", key: "1" },
+  { id: "plan", title: "Planta", key: "2" },
+  { id: "front", title: "Elevación frontal", key: "3" },
+  { id: "side", title: "Elevación lateral", key: "4" },
 ];
 
 function viewLabel(id: ViewPreset, upAxis: UpAxis): string {
@@ -30,11 +31,13 @@ function viewLabel(id: ViewPreset, upAxis: UpAxis): string {
 interface TopToolbarProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  onOpenHelp: () => void;
 }
 
 export default function TopToolbar({
   sidebarOpen,
   onToggleSidebar,
+  onOpenHelp,
 }: TopToolbarProps) {
   const model = useModelStore((state) => state.model);
   const sourceLabel = useModelStore((state) => state.sourceLabel);
@@ -134,8 +137,8 @@ export default function TopToolbar({
               )}
               title={
                 item.id === "iso"
-                  ? item.title
-                  : `${item.title} (${viewLabel(item.id, upAxis)})`
+                  ? `${item.title} · tecla ${item.key}`
+                  : `${item.title} (${viewLabel(item.id, upAxis)}) · tecla ${item.key}`
               }
               onClick={() => setView(item.id)}
               disabled={!model}
@@ -163,7 +166,7 @@ export default function TopToolbar({
           type="button"
           className="btn h-8"
           onClick={toggleProjection}
-          title="Alternar cámara perspectiva / ortográfica"
+          title="Alternar cámara perspectiva / ortográfica · tecla P"
         >
           {projection === "perspective" ? "Persp." : "Orto."}
         </button>
@@ -172,7 +175,7 @@ export default function TopToolbar({
           type="button"
           className="btn h-8 px-2"
           onClick={fitView}
-          title="Encuadrar todo: centra y ajusta el zoom para ver la estructura, las cargas y los diagramas completos"
+          title="Encuadrar todo: centra y ajusta el zoom para ver la estructura, las cargas y los diagramas completos · tecla F"
           aria-label="Encuadrar todo"
           disabled={!model}
         >
@@ -220,7 +223,7 @@ export default function TopToolbar({
           type="button"
           className={cn("btn h-8", resultsTablesOpen && "btn-active")}
           onClick={() => setResultsTablesOpen(!resultsTablesOpen)}
-          title="Tablas de resultados"
+          title="Tablas de resultados · tecla T"
           disabled={!model}
         >
           <Table2 size={14} />
@@ -252,9 +255,19 @@ export default function TopToolbar({
 
         <button
           type="button"
+          className="btn hidden h-8 px-2 md:inline-flex"
+          onClick={onOpenHelp}
+          title="Atajos de teclado · tecla ?"
+          aria-label="Atajos de teclado"
+        >
+          <Keyboard size={14} />
+        </button>
+
+        <button
+          type="button"
           className={cn("btn h-8 px-2", sidebarOpen && "btn-active")}
           onClick={onToggleSidebar}
-          title="Mostrar u ocultar el panel de control"
+          title="Mostrar u ocultar el panel de control · tecla B"
         >
           <SlidersHorizontal size={14} />
         </button>

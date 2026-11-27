@@ -9,8 +9,10 @@ import {
   type HeatmapMode,
 } from "../../engine/heatmap";
 import { resultHeatRange } from "../../engine/resultHeatmap";
+import { visibleModel } from "../../engine/visibility";
 import type { UpAxis } from "../../engine/upAxis";
 import type { PatternResultData, PymasModel } from "../../types/pymas";
+import { useVisibleModel } from "../viewport/useVisibleModel";
 import {
   useModelStore,
   type DeformedRenderMode,
@@ -98,7 +100,7 @@ export function heatLegendData(input: HeatLegendInput): HeatLegendData | null {
 export function heatLegendInputFromStore(): HeatLegendInput {
   const state = useModelStore.getState();
   return {
-    model: state.model,
+    model: state.model && visibleModel(state.model, state.visibility, state.upAxis),
     result: state.computedResult,
     heatmapMode: state.heatmapMode,
     upAxis: state.upAxis,
@@ -110,7 +112,8 @@ export function heatLegendInputFromStore(): HeatLegendInput {
 
 /** Escala del mapa de colores activo, memorizada para la interfaz. */
 export function useHeatLegend(): HeatLegendData | null {
-  const model = useModelStore((state) => state.model);
+  // La escala sólo cubre las barras visibles, igual que la escena.
+  const model = useVisibleModel(useModelStore((state) => state.model));
   const result = useModelStore((state) => state.computedResult);
   const heatmapMode = useModelStore((state) => state.heatmapMode);
   const upAxis = useModelStore((state) => state.upAxis);

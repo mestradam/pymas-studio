@@ -22,6 +22,14 @@ import {
   presetForPlane,
   type UpAxis,
 } from "../engine/upAxis";
+import {
+  EMPTY_VISIBILITY,
+  framesAtNode,
+  visibleModel,
+  type CoordinateRange,
+  type FrameKind,
+  type VisibilityFilter,
+} from "../engine/visibility";
 
 export type RenderMode = "wire" | "extruded";
 /** Representación de la deformada: polilínea o secciones `dy × dz` extruidas. */
@@ -71,6 +79,37 @@ function defaultColorMode(model: PymasModel): ColorMode {
 }
 
 /** Vigas y barras se leen mejor en el plano XY, sea cual sea el eje vertical. */
+/** Barras que representan la selección actual (barra o barras del nudo). */
+function selectionFrameIds(state: ModelState): string[] {
+  if (!state.model) return [];
+  if (state.selectedFrameId) return [state.selectedFrameId];
+  if (state.selectedNodeId) {
+    const view = visibleModel(state.model, state.visibility, state.upAxis);
+    return framesAtNode(view, state.selectedNodeId);
+  }
+  return [];
+}
+
+function toggled<T>(list: T[], value: T): T[] {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+/** Aplica un filtro de visibilidad y suelta la selección si quedó oculta. */
+function withVisibility(
+  state: Pick<ModelState, "model" | "upAxis" | "selectedFrameId" | "selectedNodeId">,
+  visibility: VisibilityFilter,
+): Partial<ModelState> {
+  const patch: Partial<ModelState> = { visibility };
+  if (!state.model) return patch;
+  const view = visibleModel(state.model, visibility, state.upAxis);
+  const frameHidden = state.selectedFrameId !== null && !view.frames[state.selectedFrameId];
+  const nodeHidden = state.selectedNodeId !== null && !view.nodes[state.selectedNodeId];
+  if (frameHidden || nodeHidden) {
+    Object.assign(patch, { selectedFrameId: null, selectedNodeId: null, chartStation: null });
+  }
+  return patch;
+}
+
 function defaultView(model: PymasModel, upAxis: UpAxis): ViewPreset {
   return /beam|bar/i.test(model.meta.type) ? presetForPlane("X", "Y", upAxis) : "iso";
 }
@@ -288,6 +327,9 @@ export interface ModelState {
   showLoads: boolean;
   showGrid: boolean;
 
+  /** Barras ocultas en el visor (por id, sección, material, tipo o rango). */
+  visibility: VisibilityFilter;
+
   /** Barra seleccionada en el visor (raycasting). */
   selectedFrameId: string | null;
   /** Nudo seleccionado en el visor (raycasting). */
@@ -357,6 +399,19 @@ export interface ModelActions {
   selectFrame: (frameId: string | null) => void;
   selectNode: (nodeId: string | null) => void;
   clearSelection: () => void;
+  hideFrames: (frameIds: string[]) => void;
+  isolateFrames: (frameIds: string[]) => void;
+  toggleHiddenSection: (sectionId: string) => void;
+  toggleHiddenMaterial: (materialId: string) => void;
+  toggleHiddenKind: (kind: FrameKind) => void;
+  setHiddenSections: (sectionIds: string[]) => void;
+  setHiddenMaterials: (materialIds: string[]) => void;
+  setVisibilityRange: (range: CoordinateRange | null) => void;
+  showAll: () => void;
+  /** Oculta la barra seleccionada, o las barras del nudo seleccionado. */
+  hideSelection: () => void;
+  /** Deja visible sólo la selección (o las barras del nudo seleccionado). */
+  isolateSelection: () => void;
   setChartStation: (station: number | null) => void;
   setResultsTablesOpen: (open: boolean) => void;
   setView: (view: ViewPreset) => void;
@@ -427,6 +482,7 @@ const INITIAL_STATE: ModelState = {
   showLoads: true,
   showGrid: true,
 
+  visibility: EMPTY_VISIBILITY,
   selectedFrameId: null,
   selectedNodeId: null,
   chartStation: null,
@@ -453,7 +509,7 @@ const INITIAL_STATE: ModelState = {
   comparePanelOpen: false,
 };
 
-export const useModelStore = create<ModelStore>((set) => {
+export const useModelStore = create<ModelStore>((set, get) => {
   const applyParsedModel = (
     model: PymasModel,
     label: string,
@@ -484,6 +540,7 @@ export const useModelStore = create<ModelStore>((set) => {
         resultError: derived.error,
         colorMode: defaultColorMode(model),
         view: defaultView(model, state.upAxis),
+        visibility: EMPTY_VISIBILITY,
         selectedFrameId: null,
         selectedNodeId: null,
         chartStation: null,
@@ -909,6 +966,58 @@ export const useModelStore = create<ModelStore>((set) => {
       }),
     clearSelection: () =>
       set({ selectedFrameId: null, selectedNodeId: null, chartStation: null }),
+    hideFrames: (frameIds) =>
+      set((state) =>
+        withVisibility(state, {
+          ...state.visibility,
+          hiddenFrames: [...new Set([...state.visibility.hiddenFrames, ...frameIds])],
+        }),
+      ),
+    isolateFrames: (frameIds) =>
+      set((state) => {
+        if (!state.model) return state;
+        const keep = new Set(frameIds);
+        return withVisibility(state, {
+          ...EMPTY_VISIBILITY,
+          hiddenFrames: state.model.frameOrder.filter((id) => !keep.has(id)),
+        });
+      }),
+    toggleHiddenSection: (sectionId) =>
+      set((state) =>
+        withVisibility(state, {
+          ...state.visibility,
+          hiddenSections: toggled(state.visibility.hiddenSections, sectionId),
+        }),
+      ),
+    toggleHiddenMaterial: (materialId) =>
+      set((state) =>
+        withVisibility(state, {
+          ...state.visibility,
+          hiddenMaterials: toggled(state.visibility.hiddenMaterials, materialId),
+        }),
+      ),
+    toggleHiddenKind: (kind) =>
+      set((state) =>
+        withVisibility(state, {
+          ...state.visibility,
+          hiddenKinds: toggled(state.visibility.hiddenKinds, kind),
+        }),
+      ),
+    setHiddenSections: (hiddenSections) =>
+      set((state) => withVisibility(state, { ...state.visibility, hiddenSections })),
+    setHiddenMaterials: (hiddenMaterials) =>
+      set((state) => withVisibility(state, { ...state.visibility, hiddenMaterials })),
+    setVisibilityRange: (range) =>
+      set((state) => withVisibility(state, { ...state.visibility, range })),
+    showAll: () => set({ visibility: EMPTY_VISIBILITY }),
+    hideSelection: () => {
+      const ids = selectionFrameIds(get());
+      if (ids.length > 0) get().hideFrames(ids);
+    },
+    isolateSelection: () => {
+      const ids = selectionFrameIds(get());
+      if (ids.length > 0) get().isolateFrames(ids);
+    },
     setChartStation: (station) =>
       set({
         chartStation:
