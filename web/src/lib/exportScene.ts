@@ -325,6 +325,15 @@ export async function exportScenePng({
     context.drawImage(paneB, paneA.width + divider, 0);
   }
 
+  // Marca discreta: pequeña y gris en la esquina superior izquierda.
+  context.save();
+  context.font = `500 ${10 * pixel}px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif`;
+  context.fillStyle = light ? "rgba(100, 116, 139, 0.7)" : "rgba(148, 163, 184, 0.55)";
+  context.textAlign = "left";
+  context.textBaseline = "top";
+  context.fillText("PyMAS Studio 3D", 10 * pixel, 8 * pixel);
+  context.restore();
+
   const legend = heatLegendData(heatLegendInputFromStore());
   if (legend) drawHeatLegend(context, legend, width, height, pixel, light);
   if (comparing && state.compareHeatmap) {
