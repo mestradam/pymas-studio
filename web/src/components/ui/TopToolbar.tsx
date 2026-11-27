@@ -121,7 +121,7 @@ export default function TopToolbar({
       <div className="ml-auto flex items-center gap-1.5">
         <OpenFileButton className="h-8" />
 
-        <div className="hidden h-8 items-center rounded-lg border border-white/10 bg-slate-950/60 p-0.5 md:flex">
+        <div className="hidden h-8 items-center rounded-lg border border-white/10 bg-slate-950/60 p-0.5 sm:flex">
           {VIEWS.map((item) => (
             <button
               key={item.id}
@@ -166,6 +166,17 @@ export default function TopToolbar({
           title="Alternar cámara perspectiva / ortográfica"
         >
           {projection === "perspective" ? "Persp." : "Orto."}
+        </button>
+
+        <button
+          type="button"
+          className="btn h-8 px-2"
+          onClick={fitView}
+          title="Encuadrar todo: centra y ajusta el zoom para ver la estructura, las cargas y los diagramas completos"
+          aria-label="Encuadrar todo"
+          disabled={!model}
+        >
+          <Maximize2 size={14} />
         </button>
 
         <div
@@ -238,16 +249,6 @@ export default function TopToolbar({
         </button>
 
         <ExportMenu />
-
-        <button
-          type="button"
-          className="btn h-8 px-2"
-          onClick={fitView}
-          title="Encuadrar el modelo"
-          disabled={!model}
-        >
-          <Maximize2 size={14} />
-        </button>
 
         <button
           type="button"
