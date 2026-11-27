@@ -300,14 +300,15 @@ export default function VisibilityPanel({ model }: { model: PymasModel }) {
       <div className="flex items-center justify-between gap-2 text-[9px] text-slate-600">
         <span>
           Barra seleccionada: <kbd className="font-mono text-slate-400">H</kbd> ocultar ·{" "}
-          <kbd className="font-mono text-slate-400">I</kbd> aislar
+          <kbd className="font-mono text-slate-400">I</kbd> aislar ·{" "}
+          <kbd className="font-mono text-slate-400">U</kbd> todo
         </span>
         <button
           type="button"
           className="btn h-6 px-2 text-[10px]"
           disabled={!active}
           onClick={showAll}
-          title="Mostrar todo (Alt+H)"
+          title="Mostrar todo (U)"
         >
           Mostrar todo
         </button>

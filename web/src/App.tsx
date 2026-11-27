@@ -15,7 +15,10 @@ import HeatLegendOverlay from "./components/ui/HeatLegendOverlay";
 import HiddenFramesBadge from "./components/ui/HiddenFramesBadge";
 import ResultsTables from "./components/ui/ResultsTables";
 import ComparePanel, { CompareLegend } from "./components/ui/ComparePanel";
+import ShortcutHelp from "./components/ui/ShortcutHelp";
+import ShortcutToast from "./components/ui/ShortcutToast";
 import { useGlobalDrop } from "./components/ui/useGlobalDrop";
+import { useKeyboardShortcuts } from "./lib/useKeyboardShortcuts";
 
 export default function App() {
   const model = useModelStore((state) => state.model);
@@ -63,46 +66,24 @@ export default function App() {
       : "PyMAS Studio 3D";
   }, [model]);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // `code` y no `key`: con Alt algunos teclados cambian el carácter.
-      if (event.code === "KeyH" || event.code === "KeyI") {
-        const target = event.target;
-        if (
-          event.ctrlKey ||
-          event.metaKey ||
-          (target instanceof Element &&
-            target.closest("input, select, textarea, [contenteditable='true']"))
-        ) {
-          return;
-        }
-        const state = useModelStore.getState();
-        if (event.code === "KeyH") {
-          if (event.altKey) state.showAll();
-          else state.hideSelection();
-        } else if (!event.altKey) {
-          state.isolateSelection();
-        }
-        event.preventDefault();
-        return;
-      }
-      if (event.key !== "Escape") return;
-      const state = useModelStore.getState();
-      if (state.resultsTablesOpen) {
-        state.setResultsTablesOpen(false);
-        return;
-      }
-      if (state.comparePanelOpen) {
-        state.setComparePanelOpen(false);
-        return;
-      }
-      if (state.selectedFrameId || state.selectedNodeId) {
-        state.clearSelection();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | undefined>(undefined);
+  useKeyboardShortcuts({
+    helpOpen,
+    closeHelp: () => setHelpOpen(false),
+    toggleHelp: () => setHelpOpen((open) => !open),
+    toggleSidebar: () => {
+      const next = !sidebarOpen;
+      setSidebarOpen(next);
+      return next;
+    },
+    notify: (message) => {
+      setToast(message);
+      window.clearTimeout(toastTimer.current);
+      toastTimer.current = window.setTimeout(() => setToast(null), 1600);
+    },
+  });
 
   const loading = loadingModel || (!model && loadingSamples);
 
@@ -111,6 +92,7 @@ export default function App() {
       <TopToolbar
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
+        onOpenHelp={() => setHelpOpen(true)}
       />
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
@@ -131,6 +113,8 @@ export default function App() {
           <ChartCursorReadout />
           {model && <HeatLegendOverlay />}
           {model && <HiddenFramesBadge />}
+          <ShortcutToast message={toast} />
+          {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
 
           <ComparePanel />
           <CompareLegend />

@@ -28,7 +28,7 @@ export default function HiddenFramesBadge() {
         type="button"
         className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-medium text-amber-200 transition hover:bg-amber-400/25"
         onClick={showAll}
-        title="Mostrar todo (Alt+H)"
+        title="Mostrar todo (U)"
       >
         Mostrar todo
       </button>
