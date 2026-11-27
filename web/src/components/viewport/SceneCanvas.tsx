@@ -30,8 +30,90 @@ import SelectionHighlight from "./SelectionHighlight";
 import ChartCursorMarker from "./ChartCursorMarker";
 import { registerCapture, type CaptureBackground } from "./captureRegistry";
 import { applyCapturePalette } from "./capturePalette";
+import { drawHtmlOverlays } from "./captureOverlays";
 import { modelToView, viewAxisNames, type UpAxis } from "../../engine/upAxis";
 import { upAxisQuaternion } from "./threeUtils";
+import { useVisibleModel } from "./useVisibleModel";
+import { boxCorners, fitCameraToPoints } from "../../engine/cameraFit";
+
+/** Grupo con todo lo dibujado del modelo; es lo que encuadra la cámara. */
+const FIT_CONTENT_NAME = "fit-content";
+
+/** Máximo de vértices muestreados por objeto al encuadrar. */
+const FIT_SAMPLES_PER_OBJECT = 60_000;
+
+/**
+ * Puntos (en coordenadas de mundo) de lo que realmente se dibuja bajo `root`:
+ * vértices de mallas y líneas (muestreados si son muchos) y esquinas de cada
+ * instancia. Omite objetos ocultos y materiales invisibles (los volúmenes de
+ * selección de `SelectionTargets`). Encuadrar con los vértices, y no con las 8
+ * esquinas de la caja envolvente, evita dejar aire en vistas oblicuas.
+ */
+function visibleContentPoints(root: THREE.Object3D): Vec3[] {
+  const points: Vec3[] = [];
+  const vertex = new THREE.Vector3();
+  const corner = new THREE.Vector3();
+  const instanceMatrix = new THREE.Matrix4();
+  const world = new THREE.Matrix4();
+  root.updateWorldMatrix(true, true);
+
+  const pushVertex = () => {
+    if (Number.isFinite(vertex.x) && Number.isFinite(vertex.y) && Number.isFinite(vertex.z)) {
+      points.push([vertex.x, vertex.y, vertex.z]);
+    }
+  };
+  const sampleAttribute = (
+    attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | undefined,
+    matrix: THREE.Matrix4,
+  ) => {
+    if (!attribute) return;
+    const step = Math.max(1, Math.ceil(attribute.count / FIT_SAMPLES_PER_OBJECT));
+    for (let index = 0; index < attribute.count; index += step) {
+      vertex.fromBufferAttribute(attribute, index).applyMatrix4(matrix);
+      pushVertex();
+    }
+  };
+
+  root.traverseVisible((object) => {
+    const drawable = object as THREE.Mesh;
+    const geometry = drawable.geometry as THREE.BufferGeometry | undefined;
+    if (!geometry) return;
+    const materials = Array.isArray(drawable.material)
+      ? drawable.material
+      : [drawable.material];
+    if (!materials.some((material) => material?.visible)) return;
+
+    const instanced = object as THREE.InstancedMesh;
+    if (instanced.isInstancedMesh) {
+      if (!geometry.boundingBox) geometry.computeBoundingBox();
+      const box = geometry.boundingBox;
+      if (!box) return;
+      for (let index = 0; index < instanced.count; index += 1) {
+        instanced.getMatrixAt(index, instanceMatrix);
+        world.multiplyMatrices(object.matrixWorld, instanceMatrix);
+        for (const x of [box.min.x, box.max.x]) {
+          for (const y of [box.min.y, box.max.y]) {
+            for (const z of [box.min.z, box.max.z]) {
+              vertex.copy(corner.set(x, y, z)).applyMatrix4(world);
+              pushVertex();
+            }
+          }
+        }
+      }
+      return;
+    }
+
+    // `LineSegments2` guarda sus extremos en atributos de instancia.
+    const start = geometry.getAttribute("instanceStart");
+    if (start) {
+      sampleAttribute(start, object.matrixWorld);
+      sampleAttribute(geometry.getAttribute("instanceEnd"), object.matrixWorld);
+      return;
+    }
+    sampleAttribute(geometry.getAttribute("position"), object.matrixWorld);
+  });
+  return points;
+}
 
 const AXIS_COLORS: Record<string, string> = {
   X: "#ef4444",
@@ -112,43 +194,81 @@ function CameraRig({
 }) {
   const camera = useThree((state) => state.camera);
   const controls = useThree((state) => state.controls) as OrbitControlsLike | null;
+  const scene = useThree((state) => state.scene);
   const size = useThree((state) => state.size);
   const sizeRef = useRef(size);
   sizeRef.current = size;
+  const lastFitToken = useRef(fitToken);
 
   useEffect(() => {
     if (!controls) return;
-    const target = new THREE.Vector3(...bounds.center);
-    const direction = new THREE.Vector3(...VIEW_DIRECTIONS[view]).normalize();
-    const up = new THREE.Vector3(...CAMERA_UP[view]);
+    // El botón "Encuadrar todo" conserva la orientación actual (aunque el
+    // usuario haya orbitado); una vista predefinida o un modelo nuevo usan la
+    // dirección del preset.
+    const keepOrientation = fitToken !== lastFitToken.current;
+    lastFitToken.current = fitToken;
+
+    const direction = keepOrientation
+      ? camera.position.clone().sub(controls.target).normalize()
+      : new THREE.Vector3(...VIEW_DIRECTIONS[view]).normalize();
+    const up = keepOrientation
+      ? camera.up.clone()
+      : new THREE.Vector3(...CAMERA_UP[view]);
+    if (!Number.isFinite(direction.lengthSq()) || direction.lengthSq() < 1e-12) {
+      direction.set(...VIEW_DIRECTIONS[view]).normalize();
+    }
     const radius = Math.max(bounds.diagonal / 2, 1e-4);
-    const margin = 1.35;
+    const perspective = (camera as THREE.PerspectiveCamera).isPerspectiveCamera
+      ? (camera as THREE.PerspectiveCamera)
+      : null;
+    const { width: viewportWidth, height } = sizeRef.current;
+    // La escala de colores ocupa el borde derecho del visor: se reserva su
+    // ancho a ambos lados para que el contenido centrado no quede debajo.
+    const legend = document.querySelector<HTMLElement>("[data-heat-legend]");
+    const reserve = legend ? legend.getBoundingClientRect().width + 20 : 0;
+    const width = Math.max(viewportWidth - 2 * reserve, viewportWidth * 0.5);
 
+    // Todo lo dibujado del modelo (barras, cargas, diagramas, deformada); si
+    // aún no hay contenido se usan los límites de los nudos.
+    const content = scene.getObjectByName(FIT_CONTENT_NAME);
+    const contentPoints = content ? visibleContentPoints(content) : [];
+    const points =
+      contentPoints.length > 0
+        ? contentPoints
+        : boxCorners(bounds.min, bounds.max);
+
+    const fit = fitCameraToPoints(
+      points,
+      [direction.x, direction.y, direction.z],
+      [up.x, up.y, up.z],
+      perspective
+        ? {
+            type: "perspective",
+            fov: perspective.fov,
+            aspect: width / Math.max(height, 1),
+          }
+        : { type: "orthographic", width, height },
+    );
+    if (!fit) return;
+
+    const target = new THREE.Vector3(...fit.target);
     camera.up.copy(up);
+    camera.position.set(...fit.position);
 
-    if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
-      const perspective = camera as THREE.PerspectiveCamera;
-      const fov = THREE.MathUtils.degToRad(perspective.fov);
-      const distance = (radius / Math.max(Math.sin(fov / 2), 1e-4)) * margin;
-      perspective.position.copy(target).addScaledVector(direction, distance);
-      perspective.near = Math.max(distance * 0.001, 1e-4);
-      perspective.far = Math.max(distance * 200, 1e6);
+    if (perspective) {
+      perspective.near = Math.max(fit.distance * 0.001, 1e-4);
+      perspective.far = Math.max((fit.distance + fit.depth) * 200, 1e6);
       perspective.updateProjectionMatrix();
       controls.minDistance = radius * 0.02;
-      controls.maxDistance = radius * 80;
+      controls.maxDistance = Math.max(radius * 80, fit.distance * 4);
     } else {
       const orthographic = camera as THREE.OrthographicCamera;
-      const { width, height } = sizeRef.current;
-      const fit = Math.min(width, height) / (2 * radius * margin);
-      orthographic.position
-        .copy(target)
-        .addScaledVector(direction, Math.max(radius * 6, 10));
       orthographic.near = 0.01;
-      orthographic.far = Math.max(radius * 400, 10_000);
-      orthographic.zoom = Math.max(fit, 0.0001);
+      orthographic.far = Math.max((fit.distance + fit.depth) * 4, 10_000);
+      orthographic.zoom = Math.max(fit.zoom, 0.0001);
       orthographic.updateProjectionMatrix();
-      controls.minDistance = radius * 6;
-      controls.maxDistance = radius * 6;
+      controls.minDistance = fit.distance;
+      controls.maxDistance = fit.distance;
     }
 
     camera.lookAt(target);
@@ -166,7 +286,7 @@ function CameraRig({
       sync.target.copy(controls.target);
       for (const listener of sync.listeners) listener();
     }
-  }, [camera, controls, bounds, view, fitToken, viewToken, sync, paneId]);
+  }, [camera, controls, scene, bounds, view, fitToken, viewToken, sync, paneId]);
 
   return null;
 }
@@ -426,6 +546,11 @@ function CaptureBridge({ id }: { id: string }) {
         const context = output.getContext("2d");
         if (!context) return null;
         context.drawImage(source, 0, 0);
+        // Etiquetas HTML (valores de diagramas, reacciones…) encima del 3D.
+        const cssWidth = source.getBoundingClientRect().width;
+        if (cssWidth > 0) {
+          drawHtmlOverlays(context, source, output.width / cssWidth);
+        }
         return output;
       } finally {
         restorePalette();
@@ -558,7 +683,9 @@ function ScenePane({
       />
 
       <Grid bounds={bounds} />
-      <group quaternion={modelRotation}>{children}</group>
+      <group name={FIT_CONTENT_NAME} quaternion={modelRotation}>
+        {children}
+      </group>
 
       <PaneControls id={id} sync={sync} />
       <CameraRig
@@ -667,7 +794,12 @@ export default function SceneCanvas() {
     [heatColors],
   );
 
-  if (!model) {
+  // Vista filtrada (barras ocultas fuera); `bounds` sigue siendo del modelo
+  // completo para que la grilla y la cámara no salten al ocultar.
+  const visibleBase = useVisibleModel(model);
+  const visibleCompare = useVisibleModel(compareModel);
+
+  if (!model || !visibleBase) {
     return (
       <div className="absolute inset-0">
         <ScenePane
@@ -685,7 +817,7 @@ export default function SceneCanvas() {
 
   const baseLayer = (
     <ModelLayer
-      model={model}
+      model={visibleBase}
       result={computedResult}
       bounds={bounds}
       colorForFrame={colorForBase}
@@ -704,9 +836,9 @@ export default function SceneCanvas() {
           onBackgroundClick={clearSelection}
         >
           {baseLayer}
-          {comparing && compareModel && (
+          {comparing && visibleCompare && (
             <ModelLayer
-              model={compareModel}
+              model={visibleCompare}
               result={compareResult}
               bounds={bounds}
               colorForFrame={() => "#f59e0b"}
@@ -743,9 +875,9 @@ export default function SceneCanvas() {
           sync={sync}
           onBackgroundClick={clearSelection}
         >
-          {compareModel && (
+          {visibleCompare && (
             <ModelLayer
-              model={compareModel}
+              model={visibleCompare}
               result={compareResult}
               bounds={bounds}
             />

@@ -10,16 +10,9 @@ import {
   FORCE_LABELS,
 } from "../../engine/diagrams";
 import { formatNumber } from "../../engine/geometry";
-import {
-  HEATMAP_GRADIENT,
-  HEATMAP_LABELS,
-  isForceHeatScalar,
-  isMomentScalar,
-  isRotationScalar,
-} from "../../engine/heatmap";
-import { resultHeatRange } from "../../engine/resultHeatmap";
-import { UP_AXES, viewPlaneLabel } from "../../engine/upAxis";
+import { HEATMAP_LABELS } from "../../engine/heatmap";
 import { cn } from "../../lib/utils";
+import VisibilityPanel from "./VisibilityPanel";
 
 const MODEL_TYPE_LABELS: Record<string, string> = {
   beam: "Viga",
@@ -27,8 +20,6 @@ const MODEL_TYPE_LABELS: Record<string, string> = {
   space_frame: "Pórtico espacial",
   space_truss: "Cercha espacial",
 };
-
-const VIEW_OPTIONS = ["iso", "plan", "front", "side"] as const;
 
 const RESULT_MODE_OPTIONS = [
   ["pattern", "Patrón"],
@@ -56,14 +47,25 @@ function Toggle({
   label,
   checked,
   onChange,
+  shortcut,
 }: {
   label: string;
   checked: boolean;
   onChange: (value: boolean) => void;
+  /** Tecla del atajo, mostrada en gris junto al interruptor. */
+  shortcut?: string;
 }) {
   return (
     <label className="switch-row">
       <span>{label}</span>
+      {shortcut && (
+        <kbd
+          className="ml-auto mr-2 font-mono text-[9px] text-slate-600"
+          title={`Atajo: tecla ${shortcut}`}
+        >
+          {shortcut}
+        </kbd>
+      )}
       <input
         type="checkbox"
         checked={checked}
@@ -111,12 +113,6 @@ export default function ControlSidebar({
   const diagramScale = useModelStore((state) => state.diagramScale);
   const showDiagramLabels = useModelStore((state) => state.showDiagramLabels);
   const showReactions = useModelStore((state) => state.showReactions);
-  const view = useModelStore((state) => state.view);
-  const setView = useModelStore((state) => state.setView);
-  const upAxis = useModelStore((state) => state.upAxis);
-  const setUpAxis = useModelStore((state) => state.setUpAxis);
-  const projection = useModelStore((state) => state.projection);
-  const toggleProjection = useModelStore((state) => state.toggleProjection);
   const renderMode = useModelStore((state) => state.renderMode);
   const colorMode = useModelStore((state) => state.colorMode);
   const opacity = useModelStore((state) => state.opacity);
@@ -191,15 +187,6 @@ export default function ControlSidebar({
     [model, computedResult, diagramComponents],
   );
 
-  const heatRange = useMemo(() => {
-    if (!model || !computedResult || heatmapMode === "none") return null;
-    try {
-      return resultHeatRange(model, computedResult, heatmapMode, upAxis);
-    } catch {
-      return null;
-    }
-  }, [model, computedResult, heatmapMode, upAxis]);
-
   const activeCaseLabel = useMemo(() => {
     if (!model) return "—";
     if (resultMode === "pattern") {
@@ -223,22 +210,6 @@ export default function ControlSidebar({
     activeCombinationId,
     activeCombinationIds,
   ]);
-
-  const heatUnit = (() => {
-    const units = model?.meta.units;
-    if (!units) return "";
-    if (isForceHeatScalar(heatmapMode)) {
-      return isMomentScalar(heatmapMode)
-        ? `${units.force}·${units.length}`
-        : units.force;
-    }
-    if (isRotationScalar(heatmapMode)) return "rad";
-    return units.length;
-  })();
-  const formatHeat = (value: number) =>
-    heatmapMode === "drift"
-      ? `${(value * 100).toFixed(3)} %`
-      : `${formatNumber(value)} ${heatUnit}`.trim();
 
   const plural = (count: number, one: string, many: string) =>
     `${count} ${count === 1 ? one : many}`;
@@ -305,51 +276,6 @@ export default function ControlSidebar({
                   <span>{plural(model.stats.combinations, "combinación", "combinaciones")}</span>
                 </div>
               </div>
-            </section>
-
-            <section>
-              <h2 className="panel-title mb-1.5">Vista de cámara</h2>
-              <div className="grid grid-cols-4 gap-1">
-                {VIEW_OPTIONS.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={cn("btn px-0 py-1 text-[10px]", view === id && "btn-active")}
-                    onClick={() => setView(id)}
-                  >
-                    {id === "iso" ? "3D" : viewPlaneLabel(id, upAxis)}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-1 flex items-center gap-1">
-                <span className="w-[72px] shrink-0 text-[10px] text-slate-500">
-                  Eje vertical
-                </span>
-                <div className="grid flex-1 grid-cols-3 gap-1">
-                  {UP_AXES.map((axis) => (
-                    <button
-                      key={axis}
-                      type="button"
-                      className={cn(
-                        "btn px-0 py-1 text-[10px]",
-                        upAxis === axis && "btn-active",
-                      )}
-                      onClick={() => setUpAxis(axis)}
-                      title={`Mostrar el eje ${axis.toUpperCase()} del modelo hacia arriba`}
-                      aria-pressed={upAxis === axis}
-                    >
-                      {axis.toUpperCase()}↑
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="btn mt-1 w-full py-1 text-[10px]"
-                onClick={toggleProjection}
-              >
-                Cámara {projection === "perspective" ? "perspectiva" : "ortográfica"}
-              </button>
             </section>
 
             <section>
@@ -514,6 +440,7 @@ export default function ControlSidebar({
               <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-1">
                 <Toggle
                   label="Mostrar deformada"
+                  shortcut="D"
                   checked={showDeformed}
                   onChange={setShowDeformed}
                 />
@@ -533,6 +460,7 @@ export default function ControlSidebar({
                         deformedRenderMode === id && "seg-btn-active",
                       )}
                       onClick={() => setDeformedRenderMode(id)}
+                      title="Línea ↔ secciones extruidas · tecla X"
                     >
                       {label}
                     </button>
@@ -545,6 +473,7 @@ export default function ControlSidebar({
                 />
                 <Toggle
                   label="Animación armónica"
+                  shortcut="A"
                   checked={animateDeformation}
                   onChange={setAnimateDeformation}
                 />
@@ -625,18 +554,6 @@ export default function ControlSidebar({
                     Plano
                   </button>
                 </div>
-                {heatmapMode !== "none" && heatRange && (
-                  <div className="mt-1.5">
-                    <div
-                      className="h-2 w-full rounded-full border border-white/10"
-                      style={{ background: HEATMAP_GRADIENT }}
-                    />
-                    <div className="mt-0.5 flex justify-between font-mono text-[9px] text-slate-500">
-                      <span>{formatHeat(heatRange.min)}</span>
-                      <span>{formatHeat(heatRange.max)}</span>
-                    </div>
-                  </div>
-                )}
               </div>
             </section>
 
@@ -650,6 +567,7 @@ export default function ControlSidebar({
               <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-1">
                 <Toggle
                   label="Mostrar diagramas 3D"
+                  shortcut="M"
                   checked={showForceDiagrams}
                   onChange={setShowForceDiagrams}
                 />
@@ -717,6 +635,7 @@ export default function ControlSidebar({
                         renderMode === id && "seg-btn-active",
                       )}
                       onClick={() => setRenderMode(id)}
+                      title="Extruido ↔ alambre · tecla E"
                     >
                       {label}
                     </button>
@@ -818,27 +737,33 @@ export default function ControlSidebar({
               </div>
             </section>
 
+            <VisibilityPanel model={model} />
+
             <section>
               <h2 className="panel-title mb-1.5">Capas</h2>
               <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-1">
-                <Toggle label="Nudos" checked={showNodes} onChange={setShowNodes} />
+                <Toggle label="Nudos" shortcut="N" checked={showNodes} onChange={setShowNodes} />
                 <Toggle
                   label="Etiquetas de nudos"
+                  shortcut="C"
                   checked={showLabels}
                   onChange={setShowLabels}
                 />
                 <Toggle
                   label="Apoyos"
+                  shortcut="S"
                   checked={showSupports}
                   onChange={setShowSupports}
                 />
                 <Toggle
                   label="Rótulas / liberaciones"
+                  shortcut="J"
                   checked={showReleases}
                   onChange={setShowReleases}
                 />
                 <Toggle
                   label="Vectores de carga"
+                  shortcut="L"
                   checked={showLoads}
                   onChange={setShowLoads}
                 />
@@ -866,10 +791,11 @@ export default function ControlSidebar({
                 )}
                 <Toggle
                   label="Reacciones en apoyos"
+                  shortcut="R"
                   checked={showReactions}
                   onChange={setShowReactions}
                 />
-                <Toggle label="Grilla XY" checked={showGrid} onChange={setShowGrid} />
+                <Toggle label="Grilla XY" shortcut="G" checked={showGrid} onChange={setShowGrid} />
               </div>
             </section>
 
