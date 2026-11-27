@@ -8,4 +8,4 @@ server that serves the compiled frontend and exposes one model at
 from .server import show
 
 __all__ = ["show"]
-__version__ = "0.4.0"
+__version__ = "0.5.0"
